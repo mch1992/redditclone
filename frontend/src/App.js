@@ -1,6 +1,89 @@
 import React, { Component } from 'react';
-import { BrowserRouter as Router, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Link, Switch } from 'react-router-dom';
 import './App.css';
+
+class Comment extends Component {
+  render() {
+    const {author, score, text, last_modified, child_comments} = this.props.comment;
+    return (
+      <ul>
+        <li>
+          <div>
+            <p>{author} {score} point{score === 1 ? '' : 's'} {last_modified}</p>
+            <p>{text}</p>
+            {child_comments.map((c, idx) => {
+              return <Comment key={idx} comment={c}/>;
+            })}
+          </div>
+        </li>
+      </ul>
+    );
+  }
+}
+
+function getHeader(post) {
+  let header, postText;
+  if (post.is_link) {
+    header = (
+      <h1>
+        <a href={post.link} target="_blank" rel="noopener noreferrer">
+          {post.title}
+        </a>
+        </h1>
+    );
+    postText = '';
+  } else {
+    header = (
+      <h1>
+        <Link to={`/r/${post.subreddit}/${post.slug}/comments`}>
+          {post.title}
+        </Link>
+      </h1>
+    );
+    postText = <p>{post.text}</p>;
+  }
+  return [header, postText];
+}
+
+class CommentsPage extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {};
+  }
+  
+  componentDidMount() {
+    fetch(`http://localhost:8000/r/${this.props.match.params.name}/${this.props.match.params.slug}/comments/`)
+      .then(response => {
+        if (response.status !== 200) {
+          console.warn('uh oh');
+        }
+        return response.json();
+      })
+      .then(data => this.setState({post: data.post}));
+  }
+  
+  render() {
+    if (!this.state.post) {
+      return <div></div>;
+    }
+    const post = this.state.post;
+    let [header, postText] = getHeader(post);
+    return (
+      <div>
+        <Link to={`/r/${post.subreddit}/`}>/r/{post.subreddit}</Link>
+        {header}
+        {postText}
+        <p>{post.score} point{post.score === 1 ? '' : 's'}</p>
+        <p>Submitted at {post.created} by {post.author}</p>
+        <hr/>
+        <p>{post.numComments} comment{post.numComments === 1 ? '' : 's'}</p>
+        {post.comments.map((comment, idx) => {
+          return <Comment key={idx} comment={comment} />;
+        })}
+      </div>
+    );
+  }
+}
 
 class Subreddit extends Component {
   constructor(props) {
@@ -29,10 +112,7 @@ class Subreddit extends Component {
       posts = this.state.posts.map((post, idx) => {
         return (
           <Post
-            title={post.title}
-            subreddit={post.subreddit}
-            score={post.score}
-            numComments={post.numComments}
+            post={post}
             key={idx}
           />
         );
@@ -52,12 +132,18 @@ class Subreddit extends Component {
 
 class Post extends Component {
   render() {
+    const post = this.props.post;
+    let [header, _] = getHeader(post);
     return (
       <div>
-        <h2>{this.props.title}</h2>
-        <p><Link to={`/r/${this.props.subreddit}`}>/r/{this.props.subreddit}</Link></p>
-        <p>{this.props.numComments} Comment{this.props.numComments === 1 ? '' : 's'}</p>
-        <p>Score: {this.props.score}</p>
+        {header}
+        <p><Link to={`/r/${post.subreddit}`}>/r/{post.subreddit}</Link></p>
+        <p>
+          <Link to={`/r/${post.subreddit}/${post.slug}/comments`}>
+            {post.numComments} Comment{post.numComments === 1 ? '' : 's'}
+          </Link>
+        </p>
+        <p>Score: {post.score}</p>
       </div>
     );
   }
@@ -91,10 +177,7 @@ class Home extends Component {
         {this.state.posts.map((post, idx) => {
           return (
             <Post
-              title={post.title}
-              subreddit={post.subreddit}
-              score={post.score}
-              numComments={post.numComments}
+              post={post}
               key={idx}
             />
           );
@@ -116,7 +199,10 @@ class App extends Component {
           </ul>
         </nav>
         <Route exact path="/" component={Home} />
-        <Route path="/r/:name" component={Subreddit} />
+        <Switch>
+          <Route path="/r/:name/:slug/comments" component={CommentsPage}/>
+          <Route path="/r/:name" component={Subreddit} />
+        </Switch>
       </Router>
     );
   }
