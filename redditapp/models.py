@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils.text import slugify
 
 class Subreddit(models.Model):
     name = models.CharField(max_length=25)
@@ -22,6 +23,11 @@ class Post(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='post_author')
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('post', 'voter'), related_name='post_voters')
+    slug = models.SlugField(unique=True, null=False)
+
+    def save(self, *args, **kwargs):
+        self.slug = slugify(self.title)
+        super(Post, self).save(*args, **kwargs)
 
     def __str__(self):
         return '/r/' + self.subreddit.name + ' -- ' + self.title
