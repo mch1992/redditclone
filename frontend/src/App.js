@@ -1,5 +1,11 @@
 import React, { Component } from 'react';
-import { BrowserRouter as Router, Route, Link, Switch } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Link, Switch, Redirect } from 'react-router-dom';
+import Form from 'react-bootstrap/Form';
+import Button from 'react-bootstrap/Button';
+import InputGroup from 'react-bootstrap/InputGroup';
+import Row from 'react-bootstrap/Row';
+import Col from 'react-bootstrap/Col';
+import Alert from 'react-bootstrap/Alert';
 import './App.css';
 
 class Comment extends Component {
@@ -149,12 +155,117 @@ class Post extends Component {
   }
 }
 
+class RegistrationLoginForm extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      username: '',
+      email: '',
+      password: '',
+      errors: []
+    };
+    this.handleInputChange = this.handleInputChange.bind(this);
+    this.handleSubmit = this.handleSubmit.bind(this);
+  }
+
+  handleInputChange(event) {
+    this.setState({
+      [event.target.name]: event.target.value
+    });
+  }
+
+  handleSubmit(event) {
+    const endpoint = this.props.registration ? 'users/' : 'users/login/';
+    fetch(`http://localhost:8000/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        user: {
+          username: this.state.username,
+          email: this.state.email,
+          password: this.state.password
+        }
+      })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.errors) {
+          let formattedErrors = [];
+          for (let [errorKey, [errorMessage, ..._]] of Object.entries(data.errors)) {
+            formattedErrors.push({
+              key: errorKey,
+              message: errorMessage
+            });
+          }
+          this.setState({errors: formattedErrors});
+        } else {
+          localStorage.setItem('username', data.user.username);
+          localStorage.setItem('jwtToken', data.user.token);
+          this.props.login(data.user);
+        }
+      });
+    event.preventDefault();
+  }
+
+  render() {
+    let error = '';
+    if (this.state.errors.length > 0) {
+      error = this.state.errors.map(e => {
+        return (
+          <Alert variant="danger">
+            {e.key}: {e.message}
+          </Alert>
+        );
+      });
+    }
+    return (
+      <div>
+        <p><strong>{this.props.registration ? 'Or register' : 'Login'}</strong></p>
+        {error}
+        <Form onSubmit={this.handleSubmit}>
+          <Col xs={2}>
+            <Form.Control
+              name="username"
+              placeholder="username"
+              size="sm"
+              onChange={this.handleInputChange}
+            />
+          </Col>
+          {this.props.registration ?
+           (<Col xs={2}>
+              <Form.Control
+                name="email"
+                type="email"
+                placeholder="email (optional)"
+                size="sm"
+                onChange={this.handleInputChange}
+              />
+            </Col>) : ''}
+          <Col xs={2}>
+            <Form.Control
+              name="password"
+              type="password"
+              placeholder="password"
+              size="sm"
+              onChange={this.handleInputChange}
+            />
+          </Col>
+          <Col>
+            <Button type="submit" size="sm">Submit</Button>
+          </Col>
+        </Form>
+      </div>
+    );
+  }
+}
+
 class Home extends Component {
   constructor(props) {
     super(props);
     this.state = {
       posts: [],
-      user: undefined,
     };
   }
 
@@ -168,12 +279,11 @@ class Home extends Component {
       })
       .then(data => this.setState({posts: data.posts}));
   }
-  
+
+
   render() {
     return (
       <div>
-        <h1>Reddit Clone</h1>
-        <p>{this.state.user ? `Logged in as ${this.state.user}` : `Not logged in`}</p>
         {this.state.posts.map((post, idx) => {
           return (
             <Post
@@ -188,16 +298,69 @@ class Home extends Component {
 }
 
 class App extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      loggedIn: false
+    };
+    this.login = this.login.bind(this);
+    this.logout = this.logout.bind(this);
+  }
+
+  login(user) {
+    this.setState({
+      loggedIn: true,
+      user: user
+    });
+  }
+
+  logout() {
+    localStorage.clear();
+    this.setState({
+      loggedIn: false,
+      user: undefined
+    });
+  }
+
+  componentDidMount() {
+    if (localStorage.getItem('username') && localStorage.getItem('jwtToken')) {
+      this.setState({
+        loggedIn: true,
+        user: {
+          username: localStorage.getItem('username')
+        }
+      });
+    }
+  }
+  
+  
   render() {
+    let userInfo;
+    if (this.state.loggedIn) {
+      userInfo = <p>Welcome {this.state.user.username}</p>;
+    } else {
+      userInfo = (
+        <div>
+          <RegistrationLoginForm login={this.login} registration={false} />
+          <RegistrationLoginForm login={this.login} registration={true} />
+        </div>
+      );
+    }
+    
     return (
       <Router>
+        <h1>Reddit Clone</h1>
+        {userInfo}
         <nav>
           <ul>
             <li>
               <Link to="/">Home</Link>
             </li>
+            {this.state.loggedIn ?
+             (<li><a href="#" onClick={this.logout}>Logout</a></li>) : ''}
           </ul>
         </nav>
+        
         <Route exact path="/" component={Home} />
         <Switch>
           <Route path="/r/:name/:slug/comments" component={CommentsPage}/>

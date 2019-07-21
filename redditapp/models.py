@@ -6,19 +6,19 @@ import jwt
 from django.conf import settings
 
 class UserManager(BaseUserManager):
-    def create_user(self, username, password=None):
+    def create_user(self, username, password=None, email=None):
         if username is None:
             raise TypeError('Users must have a username')
-        user = self.model(username=username)
+        user = self.model(username=username, email=email)
         user.set_password(password)
         user.save()
         return user
 
-    def create_superuser(self, username, password):
+    def create_superuser(self, username, password, email=None):
         if password is None:
             raise TypeError('Superusers must have a password')
 
-        user = self.create_user(username, password)
+        user = self.create_user(username, password, email)
         user.is_superuser = True
         user.is_staff = True
         user.save()
