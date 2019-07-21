@@ -1,5 +1,8 @@
 from django.shortcuts import render
 from django.http import JsonResponse
+from django.views import View
+from django.contrib.auth import authenticate
+import jwt
 
 from .models import *
 
@@ -90,3 +93,20 @@ def comments_page(request, subreddit_name, post_slug):
         })
     
     return JsonResponse({'post': post_data})
+
+class Login(View):
+    def post(self, request):
+        if not request.POST:
+            return JsonResponse({'Error': 'Please provide username/password'}, status=400)
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(username=username, password=password)
+        if user is None:
+            return JsonResponse({'Error': 'Invalid username/password'}, status=400)
+        payload = {
+            'id': user.id,
+            'username': user.username
+        }
+        jwt_token = {'token': jwt.encode(payload, SECRET_KEY)}
+        return JsonResponse(jwt_token)
+
