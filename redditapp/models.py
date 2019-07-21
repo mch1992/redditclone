@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from django.utils.text import slugify
 from datetime import datetime, timedelta
 import jwt
-import redditclone.settings as settings
+from django.conf import settings
 
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None):
@@ -38,7 +38,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = UserManager()
 
     def __str__(self):
-        return self.email
+        return self.username
 
     def get_full_name(self):
         return self.username
