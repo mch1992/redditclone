@@ -91,7 +91,7 @@ class Post(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='post_author')
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('post', 'voter'), related_name='post_voters')
-    slug = models.SlugField(unique=True, null=False)
+    slug = models.SlugField(null=False)
 
     def save(self, *args, **kwargs):
         self.slug = slugify(self.title)

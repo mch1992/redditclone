@@ -10,10 +10,6 @@ import Navbar from 'react-bootstrap/Navbar';
 import Nav from 'react-bootstrap/Nav';
 import './App.css';
 
-function url(path) {
-  return `http://localhost:8000${path}`;
-}
-
 class Comment extends Component {
   render() {
     const {author, score, text, last_modified, child_comments} = this.props.comment;
@@ -47,7 +43,7 @@ function getHeader(post) {
   } else {
     header = (
       <h1>
-        <Link to={`/r/${post.subreddit}/${post.slug}/comments`}>
+        <Link to={`/r/${post.subreddit}/${post.id}/${post.slug}/comments`}>
           {post.title}
         </Link>
       </h1>
@@ -64,7 +60,8 @@ class CommentsPage extends Component {
   }
   
   componentDidMount() {
-    fetch(url(`/r/${this.props.match.params.name}/${this.props.match.params.slug}/comments/`))
+    const {name, id, slug} = this.props.match.params;
+    fetch(`/r/${name}/${id}/${slug}/comments/`)
       .then(response => {
         if (response.status !== 200) {
           console.warn('uh oh');
@@ -104,7 +101,7 @@ class Subreddit extends Component {
   }
 
   componentDidMount() {
-    fetch(url(`/r/${this.props.match.params.name}/`))
+    fetch(`/r/${this.props.match.params.name}/`)
       .then(response => {
         if (response.status !== 200) {
           return this.setState({error: true});
@@ -133,6 +130,7 @@ class Subreddit extends Component {
     return (
       <div>
         <h1>/r/{this.props.match.params.name}</h1>
+        <Link to={`/r/${this.props.match.params.name}/create-text-post`}>Create Text Post</Link>
         <h2>Posts:</h2>
         <div>
           {posts}
@@ -151,11 +149,11 @@ class Post extends Component {
         {header}
         <p><Link to={`/r/${post.subreddit}`}>/r/{post.subreddit}</Link></p>
         <p>
-          <Link to={`/r/${post.subreddit}/${post.slug}/comments`}>
+          <Link to={`/r/${post.subreddit}/${post.id}/${post.slug}/comments`}>
             {post.numComments} Comment{post.numComments === 1 ? '' : 's'}
           </Link>
         </p>
-        <p>Score: {post.score}</p>
+        <p>{post.score} point{post.score === 1 ? '' : 's'}</p>
       </div>
     );
   }
@@ -182,7 +180,7 @@ class RegistrationLoginForm extends Component {
 
   handleSubmit(event) {
     const endpoint = this.props.registration ? 'users/' : 'users/login/';
-    fetch(url(`/${endpoint}`), {
+    fetch(`/${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -283,13 +281,12 @@ class CreateNewSubredditForm extends Component {
   }
 
   handleSubmit(event) {
-    fetch(url('/subreddit/create/'), {
+    fetch('/subreddit/create/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Token ${localStorage.getItem('jwtToken')}`
       },
-      mode: 'cors',
       body: JSON.stringify({
         subreddit: {
           name: this.state.name
@@ -348,7 +345,7 @@ class Home extends Component {
   }
 
   componentDidMount() {
-    fetch(url('/posts/'))
+    fetch('/posts/')
       .then(response => {
         if (response.status !== 200) {
           return console.warn('Uh oh');
@@ -374,6 +371,88 @@ class Home extends Component {
             />
           );
         })}
+      </div>
+    );
+  }
+}
+
+class CreateTextPost extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      title: '',
+      text: ''
+    };
+    this.handleSubmit = this.handleSubmit.bind(this);
+    this.handleChange = this.handleChange.bind(this);
+  }
+
+  handleSubmit(event) {
+    fetch(`/r/${this.props.match.params.name}/create-post/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${localStorage.getItem('jwtToken')}`
+      },
+      body: JSON.stringify({
+        post: {
+          title: this.state.title,
+          is_link: false,
+          text: this.state.text
+        }})
+    })
+      .then(response => response.json())
+      .then(data => {
+        this.setState({
+          redirectTo: `/r/${data.subreddit}/${data.id}/${data.slug}/comments`
+        });
+      });
+    event.preventDefault();
+  }
+
+  handleChange(event) {
+    this.setState({
+      [event.target.name]: event.target.value
+    });
+  }
+  
+  render() {
+    let redirect = '';
+    if (this.state.redirectTo) {
+      redirect = <Redirect to={this.state.redirectTo} />;
+    }
+    return (
+      <div>
+        {redirect}
+        <h1>
+          <Link to={`/r/${this.props.match.params.name}`}>
+            /r/{this.props.match.params.name}
+          </Link>
+        </h1>
+        <h2>Create new text post:</h2>
+        <Form onSubmit={this.handleSubmit}>
+          <Form.Group as={Col} md="6" controlId="title">
+            <Form.Label>Title</Form.Label>
+            <Form.Control
+              onChange={this.handleChange}
+              placeholder="Title"
+              name="title"
+            />
+          </Form.Group>
+          <Form.Group as={Col} md="6" controlId="text">
+            <Form.Label>Text</Form.Label>
+            <Form.Control
+              onChange={this.handleChange}
+              as="textarea"
+              name="text"
+              placeholder="Text (Optional)"
+              rows="10"
+            />
+          </Form.Group>
+          <Col>
+            <Button type="submit">Submit</Button>
+          </Col>
+        </Form>
       </div>
     );
   }
@@ -440,7 +519,8 @@ class App extends Component {
         {userInfo}
         <Route exact path="/" component={Home} />
         <Switch>
-          <Route path="/r/:name/:slug/comments" component={CommentsPage}/>
+          <Route path="/r/:name/:id/:slug/comments" component={CommentsPage}/>
+          <Route path="/r/:name/create-text-post" component={CreateTextPost}/>
           <Route path="/r/:name" component={Subreddit} />
         </Switch>
       </Router>

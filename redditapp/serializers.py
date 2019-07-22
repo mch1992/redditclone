@@ -87,3 +87,8 @@ class CreateSubredditSerializer(serializers.ModelSerializer):
             'name': name,
             'creator': creator
         }
+
+class CreatePostSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Post
+        fields = ('title', 'subreddit', 'is_link', 'text', 'author')
