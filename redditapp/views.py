@@ -172,6 +172,7 @@ class CreatePostView(CreateAPIView):
         author = request.user
         data = request.data.get('post', {})
         subreddit = Subreddit.objects.get(name=subreddit_name)
+        print(data)
         serializer = self.serializer_class(data={
             'title': data['title'],
             'subreddit': subreddit.pk,

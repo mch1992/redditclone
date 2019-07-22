@@ -127,10 +127,13 @@ class Subreddit extends Component {
         );
       });
     }
+    const { name } = this.props.match.params;
     return (
       <div>
         <h1>/r/{this.props.match.params.name}</h1>
-        <Link to={`/r/${this.props.match.params.name}/create-text-post`}>Create Text Post</Link>
+        <Link to={`/r/${name}/create-text-post`}>Create Text Post</Link>
+        <br />
+        <Link to={`/r/${name}/create-link-post`}>Create Link Post</Link>
         <h2>Posts:</h2>
         <div>
           {posts}
@@ -376,18 +379,21 @@ class Home extends Component {
   }
 }
 
-class CreateTextPost extends Component {
+class CreatePost extends Component {
   constructor(props) {
     super(props);
     this.state = {
       title: '',
-      text: ''
+      text: '',
+      link:'',
+      is_link: this.props.link
     };
     this.handleSubmit = this.handleSubmit.bind(this);
     this.handleChange = this.handleChange.bind(this);
   }
 
   handleSubmit(event) {
+    console.log(this.state.link);
     fetch(`/r/${this.props.match.params.name}/create-post/`, {
       method: 'POST',
       headers: {
@@ -397,8 +403,9 @@ class CreateTextPost extends Component {
       body: JSON.stringify({
         post: {
           title: this.state.title,
-          is_link: false,
-          text: this.state.text
+          is_link: this.state.is_link,
+          text: this.state.text,
+          link: this.state.link
         }})
     })
       .then(response => response.json())
@@ -414,12 +421,40 @@ class CreateTextPost extends Component {
     this.setState({
       [event.target.name]: event.target.value
     });
+    console.log(event.target.name, ':', event.target.value);
   }
   
   render() {
     let redirect = '';
     if (this.state.redirectTo) {
       redirect = <Redirect to={this.state.redirectTo} />;
+    }
+    let body;
+    if (this.props.link) {
+      body = (
+        <Form.Group as={Col} md="6" controlId="link">
+          <Form.Label>Link</Form.Label>
+          <Form.Control
+            onChange={this.handleChange}
+            type="url"
+            name="link"
+            placeholder="http://example.com"
+          />
+        </Form.Group>
+      );
+    } else {
+      body = (
+        <Form.Group as={Col} md="6" controlId="text">
+          <Form.Label>Text</Form.Label>
+          <Form.Control
+            onChange={this.handleChange}
+            as="textarea"
+            name="text"
+            placeholder="Text (Optional)"
+            rows="10"
+          />
+        </Form.Group>
+      );
     }
     return (
       <div>
@@ -429,7 +464,7 @@ class CreateTextPost extends Component {
             /r/{this.props.match.params.name}
           </Link>
         </h1>
-        <h2>Create new text post:</h2>
+        <h2>Create new {this.props.link ? 'link' : 'text'} post:</h2>
         <Form onSubmit={this.handleSubmit}>
           <Form.Group as={Col} md="6" controlId="title">
             <Form.Label>Title</Form.Label>
@@ -439,16 +474,7 @@ class CreateTextPost extends Component {
               name="title"
             />
           </Form.Group>
-          <Form.Group as={Col} md="6" controlId="text">
-            <Form.Label>Text</Form.Label>
-            <Form.Control
-              onChange={this.handleChange}
-              as="textarea"
-              name="text"
-              placeholder="Text (Optional)"
-              rows="10"
-            />
-          </Form.Group>
+          {body}
           <Col>
             <Button type="submit">Submit</Button>
           </Col>
@@ -520,7 +546,14 @@ class App extends Component {
         <Route exact path="/" component={Home} />
         <Switch>
           <Route path="/r/:name/:id/:slug/comments" component={CommentsPage}/>
-          <Route path="/r/:name/create-text-post" component={CreateTextPost}/>
+          <Route
+            path="/r/:name/create-text-post"
+            render={(props) => <CreatePost {...props} link={false} />}
+          />
+          <Route
+            path="/r/:name/create-link-post"
+            render={(props) => <CreatePost {...props} link={true} />}
+          />
           <Route path="/r/:name" component={Subreddit} />
         </Switch>
       </Router>
