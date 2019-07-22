@@ -4,13 +4,14 @@ from django.views import View
 from django.contrib.auth import authenticate
 import jwt
 from rest_framework import status
-from rest_framework.generics import RetrieveUpdateAPIView
+from rest_framework.generics import RetrieveUpdateAPIView, CreateAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.renderers import JSONRenderer
 
 from .models import *
-from .serializers import RegistrationSerializer, LoginSerializer, UserSerializer
+from .serializers import *
 from .renderers import UserJSONRenderer
 
 def posts(request):
@@ -144,3 +145,19 @@ class UserRetrieveUpdateAPIView(RetrieveUpdateAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CreateSubredditView(CreateAPIView):
+    permission_classes = (IsAuthenticated,)
+    renderer_classes = (JSONRenderer,)
+    serializer_class = CreateSubredditSerializer
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+        subreddit_data = request.data.get('subreddit', {})
+        serializer = self.serializer_class(data={
+            'name': subreddit_data.get('name'),
+            'creator': user.pk
+        })
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

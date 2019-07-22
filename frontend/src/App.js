@@ -6,7 +6,13 @@ import InputGroup from 'react-bootstrap/InputGroup';
 import Row from 'react-bootstrap/Row';
 import Col from 'react-bootstrap/Col';
 import Alert from 'react-bootstrap/Alert';
+import Navbar from 'react-bootstrap/Navbar';
+import Nav from 'react-bootstrap/Nav';
 import './App.css';
+
+function url(path) {
+  return `http://localhost:8000${path}`;
+}
 
 class Comment extends Component {
   render() {
@@ -58,7 +64,7 @@ class CommentsPage extends Component {
   }
   
   componentDidMount() {
-    fetch(`http://localhost:8000/r/${this.props.match.params.name}/${this.props.match.params.slug}/comments/`)
+    fetch(url(`/r/${this.props.match.params.name}/${this.props.match.params.slug}/comments/`))
       .then(response => {
         if (response.status !== 200) {
           console.warn('uh oh');
@@ -98,7 +104,7 @@ class Subreddit extends Component {
   }
 
   componentDidMount() {
-    fetch(`http://localhost:8000/r/${this.props.match.params.name}/`)
+    fetch(url(`/r/${this.props.match.params.name}/`))
       .then(response => {
         if (response.status !== 200) {
           return this.setState({error: true});
@@ -176,7 +182,7 @@ class RegistrationLoginForm extends Component {
 
   handleSubmit(event) {
     const endpoint = this.props.registration ? 'users/' : 'users/login/';
-    fetch(`http://localhost:8000/${endpoint}`, {
+    fetch(url(`/${endpoint}`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -261,6 +267,78 @@ class RegistrationLoginForm extends Component {
   }
 }
 
+function authenticated() {
+  return localStorage.getItem('username') && localStorage.getItem('jwtToken');
+}
+
+class CreateNewSubredditForm extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      redirect: false,
+      name: ''
+    };
+    this.handleSubmit = this.handleSubmit.bind(this);
+    this.handleChange = this.handleChange.bind(this);
+  }
+
+  handleSubmit(event) {
+    fetch(url('/subreddit/create/'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${localStorage.getItem('jwtToken')}`
+      },
+      mode: 'cors',
+      body: JSON.stringify({
+        subreddit: {
+          name: this.state.name
+        }
+      })
+    })
+      .then(response => response.json())
+      .then(data => {
+        if (data.errors) {
+          
+        } else {
+          this.setState({
+            redirect: true
+          });
+        }
+      });
+    event.preventDefault();
+  }
+
+  handleChange(event) {
+    this.setState({
+      [event.target.name]: event.target.value
+    });
+  }
+
+  renderRedirect() {
+    if (this.state.redirect) {
+      return <Redirect to={`/r/${this.state.name}`} />;
+    }
+    return '';
+  }
+  
+  render() {
+    return (
+      <div>
+        {this.renderRedirect()}
+        <Form inline onSubmit={this.handleSubmit}>
+          <Form.Control
+            placeholder="Subreddit Name"
+            name="name"
+            onChange={this.handleChange}
+          />
+          <Button type="submit">Create New Subreddit</Button>
+        </Form>
+      </div>
+    );
+  }
+}
+
 class Home extends Component {
   constructor(props) {
     super(props);
@@ -270,7 +348,7 @@ class Home extends Component {
   }
 
   componentDidMount() {
-    fetch('http://localhost:8000/posts/')
+    fetch(url('/posts/'))
       .then(response => {
         if (response.status !== 200) {
           return console.warn('Uh oh');
@@ -280,10 +358,14 @@ class Home extends Component {
       .then(data => this.setState({posts: data.posts}));
   }
 
-
   render() {
+    let createSubreddit = '';
+    if (authenticated()) {
+      createSubreddit = <CreateNewSubredditForm />;
+    }
     return (
       <div>
+        {createSubreddit}
         {this.state.posts.map((post, idx) => {
           return (
             <Post
@@ -323,7 +405,7 @@ class App extends Component {
   }
 
   componentDidMount() {
-    if (localStorage.getItem('username') && localStorage.getItem('jwtToken')) {
+    if (authenticated()) {
       this.setState({
         loggedIn: true,
         user: {
@@ -333,11 +415,12 @@ class App extends Component {
     }
   }
   
-  
   render() {
     let userInfo;
+    let logoutLink = '';
     if (this.state.loggedIn) {
       userInfo = <p>Welcome {this.state.user.username}</p>;
+      logoutLink = <Nav.Link href="#" onClick={this.logout}>Logout</Nav.Link>;
     } else {
       userInfo = (
         <div>
@@ -346,21 +429,15 @@ class App extends Component {
         </div>
       );
     }
-    
     return (
       <Router>
-        <h1>Reddit Clone</h1>
+        <Navbar bg="dark" variant="dark">
+          <Navbar.Brand href="/">Reddit Clone</Navbar.Brand>
+          <Nav className="mr-auto">
+            {logoutLink}
+          </Nav>
+        </Navbar>
         {userInfo}
-        <nav>
-          <ul>
-            <li>
-              <Link to="/">Home</Link>
-            </li>
-            {this.state.loggedIn ?
-             (<li><a href="#" onClick={this.logout}>Logout</a></li>) : ''}
-          </ul>
-        </nav>
-        
         <Route exact path="/" component={Home} />
         <Switch>
           <Route path="/r/:name/:slug/comments" component={CommentsPage}/>

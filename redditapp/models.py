@@ -60,12 +60,22 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         return token.decode('utf-8')
 
+class SubredditManager(models.Manager):
+    def create(self, name, creator):
+        subreddit = self.model(name=name, creator=creator)
+        subreddit.save()
+        subreddit.moderators.add(creator)
+        subreddit.subscribers.add(creator)
+        return subreddit
+
 class Subreddit(models.Model):
-    name = models.CharField(max_length=25)
+    name = models.CharField(max_length=25, unique=True)
     subscribers = models.ManyToManyField(User, related_name='subscribers')
     moderators = models.ManyToManyField(User, related_name='moderators')
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='creator')
     created = models.DateTimeField(auto_now_add=True)
+    is_deleted = models.BooleanField(default=False)
+    objects = SubredditManager()
 
     def __str__(self):
         return '/r/' + self.name

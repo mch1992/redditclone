@@ -6,6 +6,17 @@ from rest_framework import authentication, exceptions
 
 from .models import User
 
+class AllowOptions(object):
+    """
+    CORS requests make a preflight OPTIONS request which doesn't include
+    authentication headers.  Since the development environment involves
+    the frontend on one server and the backend on another, this workaround
+    is necessary.  Should not be necessary in production is everything is
+    on the same server/origin.
+    """
+    user = True
+    is_authenticated = True
+
 class JWTAuthentication(authentication.BaseAuthentication):
     authentication_header_prefix = 'Token'
 
@@ -30,6 +41,8 @@ class JWTAuthentication(authentication.BaseAuthentication):
                             exception and let Django REST Framework
                             handle the rest.
         """
+        if request.method == 'OPTIONS':
+            return (AllowOptions(), True)
         request.user = None
 
         # `auth_header` should be an array with two elements: 1) the name of

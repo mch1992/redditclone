@@ -9,5 +9,6 @@ urlpatterns = [
     path('r/<str:subreddit_name>/<slug:post_slug>/comments/', views.comments_page, name='comments_page'),
     path('user/', views.UserRetrieveUpdateAPIView.as_view(), name='user'),
     path('users/', views.RegistrationAPIView.as_view(), name='users'),
-    path('users/login/', views.LoginAPIView.as_view(), name='login')
+    path('users/login/', views.LoginAPIView.as_view(), name='login'),
+    path('subreddit/create/', views.CreateSubredditView.as_view(), name='create_subreddit')
 ]

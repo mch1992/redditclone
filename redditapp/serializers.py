@@ -1,7 +1,7 @@
 from django.contrib.auth import authenticate
 from rest_framework import serializers
 
-from .models import User
+from .models import *
 
 class RegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
@@ -32,7 +32,7 @@ class LoginSerializer(serializers.Serializer):
         if username is None:
             raise serializers.ValidationError('A username is required to log in')
         if password is None:
-            raise serializes.ValidationError('A password is required to log in')
+            raise serializers.ValidationError('A password is required to log in')
         user = authenticate(username=username, password=password)
         if user is None:
             raise serializers.ValidationError('A user with this username and password was not found')
@@ -69,3 +69,21 @@ class UserSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+class CreateSubredditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subreddit
+        fields = ('name', 'creator', 'created', 'is_deleted')
+
+    def validate(self, data):
+        name = data.get('name')
+        creator = data.get('creator')
+        if name is None:
+            raise serializers.ValidationError('A name is required to create a subreddit.')
+        if creator is None:
+            raise serializers.ValidationError('A creator is required to create a subreddit.')
+        
+        return {
+            'name': name,
+            'creator': creator
+        }
