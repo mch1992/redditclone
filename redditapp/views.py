@@ -217,5 +217,5 @@ class CreateCommentView(CreateAPIView):
         return Response(d, status=status.HTTP_201_CREATED)
 
 class SubredditList(ListAPIView):
-    queryset = Subreddit.objects.filter(is_deleted=False)
+    queryset = Subreddit.objects.filter(is_deleted=False).order_by('name')
     serializer_class = SubredditSerializer
