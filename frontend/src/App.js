@@ -280,13 +280,20 @@ class Subreddit extends Component {
         );
       });
     }
+    let createPosts = '';
+    if (authenticated()) {
+      createPosts = (
+        <div>
+          <Link to={`/r/${name}/create-link-post`}>Create Link Post</Link>
+          <br />
+          <Link to={`/r/${name}/create-text-post`}>Create Text Post</Link>
+        </div>
+      );
+    }
     const { name } = this.props.match.params;
     return (
       <div>
         <h1>/r/{this.props.match.params.name}</h1>
-        <Link to={`/r/${name}/create-text-post`}>Create Text Post</Link>
-        <br />
-        <Link to={`/r/${name}/create-link-post`}>Create Link Post</Link>
         <h2>Posts:</h2>
         <div>
           {posts}
@@ -657,13 +664,16 @@ class SubredditList extends Component {
 
   render() {
     return (
-      <ul>
+      <div>
+        <h1>Subreddits:</h1>
+        <ul>
           {this.state.subredditList.map((s, idx) => (
             <li key={idx}>
               <Link to={`/r/${s.name}`}>/r/{s.name}</Link>
             </li>
           ))}
-      </ul>
+        </ul>
+      </div>
     );
   }
 }
