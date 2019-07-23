@@ -8,6 +8,7 @@ import Col from 'react-bootstrap/Col';
 import Alert from 'react-bootstrap/Alert';
 import Navbar from 'react-bootstrap/Navbar';
 import Nav from 'react-bootstrap/Nav';
+import ListGroup from 'react-bootstrap/ListGroup';
 import './App.css';
 
 class CommentForm extends Component {
@@ -134,8 +135,8 @@ class Comment extends Component {
     const { author, score, text, last_modified } = this.props.comment;
     const { post, updatePost } = this.props;
     return (
-      <ul>
-        <li>
+      <ListGroup>
+        <ListGroup.Item>
           <div>
             <p>{author} {score} point{score === 1 ? '' : 's'} {last_modified}</p>
             <p>{text}</p>
@@ -156,8 +157,8 @@ class Comment extends Component {
               );
             })}
           </div>
-        </li>
-      </ul>
+        </ListGroup.Item>
+      </ListGroup>
     );
   }
 }
@@ -489,11 +490,16 @@ class CreateNewSubredditForm extends Component {
       <div>
         {this.renderRedirect()}
         <Form inline onSubmit={this.handleSubmit}>
-          <Form.Control
-            placeholder="Subreddit Name"
-            name="name"
-            onChange={this.handleChange}
-          />
+          <InputGroup>
+            <InputGroup.Prepend>
+              <InputGroup.Text id="inputGroupPrepend">/r/</InputGroup.Text>
+            </InputGroup.Prepend>
+            <Form.Control
+              placeholder="Subreddit Name"
+              name="name"
+              onChange={this.handleChange}
+            />
+          </InputGroup>
           <Button type="submit">Create New Subreddit</Button>
         </Form>
       </div>
@@ -665,8 +671,13 @@ class SubredditList extends Component {
   }
 
   render() {
+    let createSubreddit = '';
+    if (authenticated()) {
+      createSubreddit = <CreateNewSubredditForm />;
+    }
     return (
       <div>
+        {createSubreddit}
         <h1>Subreddits:</h1>
         <ul>
           {this.state.subredditList.map((s, idx) => (
