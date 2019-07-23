@@ -281,6 +281,7 @@ class Subreddit extends Component {
       });
     }
     let createPosts = '';
+    const { name } = this.props.match.params;
     if (authenticated()) {
       createPosts = (
         <div>
@@ -290,10 +291,11 @@ class Subreddit extends Component {
         </div>
       );
     }
-    const { name } = this.props.match.params;
+
     return (
       <div>
-        <h1>/r/{this.props.match.params.name}</h1>
+        <h1>/r/{name}</h1>
+        {createPosts}
         <h2>Posts:</h2>
         <div>
           {posts}
