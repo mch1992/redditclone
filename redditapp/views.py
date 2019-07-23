@@ -60,6 +60,7 @@ def serialize_comments(comments):
                 'text': c.text
             })
         s.update({
+            'id': c.pk,
             'created': c.created,
             'last_modified': c.last_modified,
             'score': sum(v.value for v in c.vote_set.all()),
@@ -172,7 +173,6 @@ class CreatePostView(CreateAPIView):
         author = request.user
         data = request.data.get('post', {})
         subreddit = Subreddit.objects.get(name=subreddit_name)
-        print(data)
         serializer = self.serializer_class(data={
             'title': data['title'],
             'subreddit': subreddit.pk,
@@ -188,3 +188,29 @@ class CreatePostView(CreateAPIView):
             'subreddit': subreddit_name,
             'id': post.pk
         }, status=status.HTTP_201_CREATED)
+
+class CreateCommentView(CreateAPIView):
+    permission_classes = (IsAuthenticated,)
+    renderer_classes = (JSONRenderer,)
+    serializer_class = CreateCommentSerializer
+
+    def create(self, request, *args, **kwargs):
+        author = request.user
+        data = request.data.get('comment', {})
+        post_id = data['post_id']
+        parent_comment_id = data.get('parent_comment_id')
+        text = data.get('text')
+        serializer = self.serializer_class(data={
+            'post': post_id,
+            'author': author.pk,
+            'parent_comment': parent_comment_id,
+            'text': text
+        })
+        serializer.is_valid(raise_exception=True)
+        comment = serializer.save()
+        d = serializer.data
+        d['child_comments'] = []
+        d['author'] = request.user.username
+        d['score'] = sum(v for v in comment.vote_set.all())
+        d['last_modified'] = comment.last_modified
+        return Response(d, status=status.HTTP_201_CREATED)

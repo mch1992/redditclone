@@ -11,5 +11,6 @@ urlpatterns = [
     path('users/', views.RegistrationAPIView.as_view(), name='users'),
     path('users/login/', views.LoginAPIView.as_view(), name='login'),
     path('subreddit/create/', views.CreateSubredditView.as_view(), name='create_subreddit'),
-    path('r/<str:subreddit_name>/create-post/', views.CreatePostView.as_view(), name='create_post')
+    path('r/<str:subreddit_name>/create-post/', views.CreatePostView.as_view(), name='create_post'),
+    path('comments/', views.CreateCommentView.as_view(), name='create_comment')
 ]

@@ -10,17 +10,110 @@ import Navbar from 'react-bootstrap/Navbar';
 import Nav from 'react-bootstrap/Nav';
 import './App.css';
 
-class Comment extends Component {
+class CommentForm extends Component {
+  constructor(props) {
+    super(props);
+    this.handleChange = this.handleChange.bind(this);
+    this.handleSubmit = this.handleSubmit.bind(this);
+    this.textarea = React.createRef();
+  }
+
+  handleSubmit(event) {
+    fetch('/comments/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${localStorage.getItem('jwtToken')}`
+      },
+      body: JSON.stringify({
+        comment: {
+          post_id: this.props.postId,
+          parent_comment_id: this.props.parent_comment_id,
+          text: this.state.text
+        }})
+    })
+      .then(response => response.json())
+      .then(data => {
+        this.textarea.current.value = "";
+        this.props.updatePost();
+        this.props.updateParent(data);
+      });
+      
+    event.preventDefault();
+  }
+  
+  handleChange(event) {
+    this.setState({
+      [event.target.name]: event.target.value
+    });
+  }
+  
   render() {
-    const {author, score, text, last_modified, child_comments} = this.props.comment;
+    if (!authenticated()) {
+      return '';
+    }
+    return (
+      <Form onSubmit={this.handleSubmit}>
+        <Form.Group as={Col} md="5" controlId="text">
+          <Form.Label>Speaking as {localStorage.getItem('username')}</Form.Label>
+          <Form.Control
+            onChange={this.handleChange}
+            as="textarea"
+            name="text"
+            placeholder="Comment"
+            rows="5"
+            ref={this.textarea}
+          />
+        </Form.Group>
+        <Col>
+          <Button type="submit">Save</Button>
+        </Col>
+      </Form>
+    );
+  }
+}
+
+class Comment extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      childComments: this.props.comment.child_comments
+    };
+    this.updateChildComments = this.updateChildComments.bind(this);
+  }
+
+  updateChildComments(newComment) {
+    this.setState((state, props) => {
+      return {childComments: state.childComments.concat(newComment)};
+    });
+  }
+  
+  render() {
+    const {author, score, text, last_modified } = this.props.comment;
+    const { post, updatePost } = this.props;
     return (
       <ul>
         <li>
           <div>
             <p>{author} {score} point{score === 1 ? '' : 's'} {last_modified}</p>
             <p>{text}</p>
-            {child_comments.map((c, idx) => {
-              return <Comment key={idx} comment={c}/>;
+            <CommentForm
+              postId={post.id}
+              updatePost={updatePost}
+              updateParent={this.updateChildComments}
+              parent_comment_id={this.props.comment.id}
+            />
+            {this.state.childComments.map((c, idx) => {
+              return (
+                <div>
+                  <Comment
+                    key={idx}
+                    comment={c}
+                    post={post}
+                    updatePost={updatePost}
+                  />
+                </div>
+              );
             })}
           </div>
         </li>
@@ -57,9 +150,10 @@ class CommentsPage extends Component {
   constructor(props) {
     super(props);
     this.state = {};
+    this.updateComments = this.updateComments.bind(this);
   }
-  
-  componentDidMount() {
+
+  updateComments() {
     const {name, id, slug} = this.props.match.params;
     fetch(`/r/${name}/${id}/${slug}/comments/`)
       .then(response => {
@@ -71,12 +165,17 @@ class CommentsPage extends Component {
       .then(data => this.setState({post: data.post}));
   }
   
+  componentDidMount() {
+    this.updateComments();
+  }
+  
   render() {
     if (!this.state.post) {
       return <div></div>;
     }
     const post = this.state.post;
     let [header, postText] = getHeader(post);
+    
     return (
       <div>
         <Link to={`/r/${post.subreddit}/`}>/r/{post.subreddit}</Link>
@@ -84,10 +183,22 @@ class CommentsPage extends Component {
         {postText}
         <p>{post.score} point{post.score === 1 ? '' : 's'}</p>
         <p>Submitted at {post.created} by {post.author}</p>
-        <hr/>
         <p>{post.numComments} comment{post.numComments === 1 ? '' : 's'}</p>
+        <hr />
+        <CommentForm
+          postId={this.state.post.id}
+          updatePost={this.updateComments}
+          updateParent={(x)=>{}}
+        />
         {post.comments.map((comment, idx) => {
-          return <Comment key={idx} comment={comment} />;
+          return (
+            <Comment
+              key={idx}
+              comment={comment}
+              post={this.state.post}
+              updatePost={this.updateComments}
+            />
+          );
         })}
       </div>
     );

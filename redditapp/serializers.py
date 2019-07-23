@@ -92,3 +92,8 @@ class CreatePostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = ('title', 'subreddit', 'is_link', 'text', 'author', 'link')
+
+class CreateCommentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ('post', 'author', 'parent_comment', 'text')
