@@ -213,4 +213,5 @@ class CreateCommentView(CreateAPIView):
         d['author'] = request.user.username
         d['score'] = sum(v for v in comment.vote_set.all())
         d['last_modified'] = comment.last_modified
+        d['id'] = comment.pk
         return Response(d, status=status.HTTP_201_CREATED)

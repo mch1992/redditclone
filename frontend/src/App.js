@@ -16,6 +16,11 @@ class CommentForm extends Component {
     this.handleChange = this.handleChange.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
     this.textarea = React.createRef();
+    this.showReplyForm = this.showReplyForm.bind(this);
+    this.hideReplyForm = this.hideReplyForm.bind(this);
+    this.state = {
+      formClass: (this.props.topComment ? 'show' : 'hide')
+    };
   }
 
   handleSubmit(event) {
@@ -35,40 +40,75 @@ class CommentForm extends Component {
       .then(response => response.json())
       .then(data => {
         this.textarea.current.value = "";
-        this.props.updatePost();
+        this.props.updatePost(data);
         this.props.updateParent(data);
+        if (!this.props.topComment) {
+          this.setState({
+            formClass: 'hide'
+          });
+        }
       });
-      
+
     event.preventDefault();
   }
-  
+
   handleChange(event) {
     this.setState({
       [event.target.name]: event.target.value
     });
   }
-  
+
+  showReplyForm(event) {
+    this.setState({
+      formClass: 'show'
+    });
+    event.preventDefault();
+  }
+
+  hideReplyForm() {
+    this.setState({
+      formClass: 'hide'
+    });
+  }
+
   render() {
     if (!authenticated()) {
       return '';
     }
+    let replyLink = '';
+    let cancelButton = '';
+    if (!this.props.topComment) {
+      replyLink = <a href="#" onClick={this.showReplyForm}>reply</a>;
+      cancelButton = (
+        <Button
+          variant="secondary"
+          onClick={this.hideReplyForm}
+        >
+          Cancel
+        </Button>
+      );
+    }
     return (
-      <Form onSubmit={this.handleSubmit}>
-        <Form.Group as={Col} md="5" controlId="text">
-          <Form.Label>Speaking as {localStorage.getItem('username')}</Form.Label>
-          <Form.Control
-            onChange={this.handleChange}
-            as="textarea"
-            name="text"
-            placeholder="Comment"
-            rows="5"
-            ref={this.textarea}
-          />
-        </Form.Group>
-        <Col>
-          <Button type="submit">Save</Button>
-        </Col>
-      </Form>
+      <div>
+        {replyLink}
+        <Form onSubmit={this.handleSubmit} className={this.state.formClass}>
+          <Form.Group as={Col} md="5" controlId="text">
+            <Form.Label>Speaking as {localStorage.getItem('username')}</Form.Label>
+            <Form.Control
+              onChange={this.handleChange}
+              as="textarea"
+              name="text"
+              placeholder="Comment"
+              rows="5"
+              ref={this.textarea}
+            />
+          </Form.Group>
+          <Form.Group as={Col}>
+            <Button type="submit">Save</Button>
+            {cancelButton}
+          </Form.Group>
+        </Form>
+      </div>
     );
   }
 }
@@ -84,12 +124,14 @@ class Comment extends Component {
 
   updateChildComments(newComment) {
     this.setState((state, props) => {
+      console.log(this.props.comment);
+      console.log(state.childComments);
       return {childComments: state.childComments.concat(newComment)};
     });
   }
-  
+
   render() {
-    const {author, score, text, last_modified } = this.props.comment;
+    const { author, score, text, last_modified } = this.props.comment;
     const { post, updatePost } = this.props;
     return (
       <ul>
@@ -105,14 +147,12 @@ class Comment extends Component {
             />
             {this.state.childComments.map((c, idx) => {
               return (
-                <div>
-                  <Comment
-                    key={idx}
-                    comment={c}
-                    post={post}
-                    updatePost={updatePost}
-                  />
-                </div>
+                <Comment
+                  key={idx}
+                  comment={c}
+                  post={post}
+                  updatePost={updatePost}
+                />
               );
             })}
           </div>
@@ -151,6 +191,7 @@ class CommentsPage extends Component {
     super(props);
     this.state = {};
     this.updateComments = this.updateComments.bind(this);
+    
   }
 
   updateComments() {
@@ -164,18 +205,18 @@ class CommentsPage extends Component {
       })
       .then(data => this.setState({post: data.post}));
   }
-  
+
   componentDidMount() {
     this.updateComments();
   }
-  
+
   render() {
     if (!this.state.post) {
       return <div></div>;
     }
     const post = this.state.post;
     let [header, postText] = getHeader(post);
-    
+
     return (
       <div>
         <Link to={`/r/${post.subreddit}/`}>/r/{post.subreddit}</Link>
@@ -189,6 +230,7 @@ class CommentsPage extends Component {
           postId={this.state.post.id}
           updatePost={this.updateComments}
           updateParent={(x)=>{}}
+          topComment={true}
         />
         {post.comments.map((comment, idx) => {
           return (
@@ -221,7 +263,7 @@ class Subreddit extends Component {
       })
       .then(data => this.setState({posts: data.posts}));
   }
-  
+
   render() {
     let posts;
     if (this.state.error) {
@@ -410,7 +452,7 @@ class CreateNewSubredditForm extends Component {
       .then(response => response.json())
       .then(data => {
         if (data.errors) {
-          
+
         } else {
           this.setState({
             redirect: true
@@ -432,7 +474,7 @@ class CreateNewSubredditForm extends Component {
     }
     return '';
   }
-  
+
   render() {
     return (
       <div>
@@ -534,7 +576,7 @@ class CreatePost extends Component {
     });
     console.log(event.target.name, ':', event.target.value);
   }
-  
+
   render() {
     let redirect = '';
     if (this.state.redirectTo) {
@@ -630,7 +672,7 @@ class App extends Component {
       });
     }
   }
-  
+
   render() {
     let userInfo;
     let logoutLink = '';
