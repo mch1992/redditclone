@@ -70,7 +70,7 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-class CreateSubredditSerializer(serializers.ModelSerializer):
+class SubredditSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subreddit
         fields = ('name', 'creator', 'created', 'is_deleted')

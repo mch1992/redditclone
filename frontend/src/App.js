@@ -78,7 +78,7 @@ class CommentForm extends Component {
     let replyLink = '';
     let cancelButton = '';
     if (!this.props.topComment) {
-      replyLink = <a href="#" onClick={this.showReplyForm}>reply</a>;
+      replyLink = <Button variant="link" onClick={this.showReplyForm}>reply</Button>;
       cancelButton = (
         <Button
           variant="secondary"
@@ -191,7 +191,7 @@ class CommentsPage extends Component {
     super(props);
     this.state = {};
     this.updateComments = this.updateComments.bind(this);
-    
+
   }
 
   updateComments() {
@@ -637,6 +637,37 @@ class CreatePost extends Component {
   }
 }
 
+class SubredditList extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      subredditList: []
+    };
+  }
+
+  componentDidMount() {
+    fetch('/subreddits/')
+      .then(response => response.json())
+      .then(data => {
+        this.setState({
+          subredditList: data
+        });
+      });
+  }
+
+  render() {
+    return (
+      <ul>
+          {this.state.subredditList.map((s, idx) => (
+            <li key={idx}>
+              <Link to={`/r/${s.name}`}>/r/{s.name}</Link>
+            </li>
+          ))}
+      </ul>
+    );
+  }
+}
+
 class App extends Component {
   constructor(props) {
     super(props);
@@ -692,11 +723,15 @@ class App extends Component {
         <Navbar bg="dark" variant="dark">
           <Navbar.Brand href="/">Reddit Clone</Navbar.Brand>
           <Nav className="mr-auto">
+            <Nav.Link href="/subreddits/">Subreddits</Nav.Link>
+          </Nav>
+          <Nav>
             {logoutLink}
           </Nav>
         </Navbar>
         {userInfo}
         <Route exact path="/" component={Home} />
+        <Route path="/subreddits/" component={SubredditList} />
         <Switch>
           <Route path="/r/:name/:id/:slug/comments" component={CommentsPage}/>
           <Route

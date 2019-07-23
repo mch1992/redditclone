@@ -4,7 +4,7 @@ from django.views import View
 from django.contrib.auth import authenticate
 import jwt
 from rest_framework import status
-from rest_framework.generics import RetrieveUpdateAPIView, CreateAPIView
+from rest_framework.generics import RetrieveUpdateAPIView, CreateAPIView, ListAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -68,7 +68,7 @@ def serialize_comments(comments):
         })
         serialized_comments.append(s)
     return serialized_comments
-    
+
 
 def comments_page(request, subreddit_name, pk, post_slug):
     post = Post.objects.get(pk=pk)
@@ -101,7 +101,7 @@ def comments_page(request, subreddit_name, pk, post_slug):
             'text': post.text,
             'title': post.title
         })
-    
+
     return JsonResponse({'post': post_data})
 
 class RegistrationAPIView(APIView):
@@ -151,7 +151,7 @@ class UserRetrieveUpdateAPIView(RetrieveUpdateAPIView):
 class CreateSubredditView(CreateAPIView):
     permission_classes = (IsAuthenticated,)
     renderer_classes = (JSONRenderer,)
-    serializer_class = CreateSubredditSerializer
+    serializer_class = SubredditSerializer
 
     def create(self, request, *args, **kwargs):
         user = request.user
@@ -215,3 +215,7 @@ class CreateCommentView(CreateAPIView):
         d['last_modified'] = comment.last_modified
         d['id'] = comment.pk
         return Response(d, status=status.HTTP_201_CREATED)
+
+class SubredditList(ListAPIView):
+    queryset = Subreddit.objects.filter(is_deleted=False)
+    serializer_class = SubredditSerializer
