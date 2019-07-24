@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils.text import slugify
 from datetime import datetime, timedelta
@@ -166,10 +167,12 @@ class Vote(models.Model):
         self.validate()
         super(Vote, self).save(*args, **kwargs)
         if self.comment:
-            self.comment.votes = sum(v.value for v in self.comment.vote_set.all())
+            value__sum = self.comment.vote_set.aggregate(Sum('value'))
+            self.comment.votes = value__sum['value__sum']
             self.comment.save()
         if self.post:
-            self.post.votes = sum(v.value for v in self.vote_set.all())
+            value__sum = self.post.vote_set.aggregate(Sum('value'))
+            self.post.votes = value__sum['value__sum']
             self.post.save()
 
     def delete(self, *args, **kwargs):
