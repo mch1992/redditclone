@@ -92,11 +92,15 @@ class Post(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='post_author')
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('post', 'voter'), related_name='post_voters')
+    votes = models.IntegerField(default=0)
     slug = models.SlugField(null=False)
 
     def save(self, *args, **kwargs):
         self.slug = slugify(self.title)
+        add_vote = self.pk is None
         super(Post, self).save(*args, **kwargs)
+        if add_vote:
+            Vote.objects.create(voter=self.author, value=1, post=self)
 
     def __str__(self):
         return '/r/' + self.subreddit.name + ' -- ' + self.title
@@ -110,10 +114,13 @@ class Comment(models.Model):
     text = models.TextField()
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('comment', 'voter'), related_name='comment_voters')
+    votes = models.IntegerField(default=0)
 
     def save(self, *args, **kwargs):
+        add_vote = self.pk is None
         super(Comment, self).save(*args, **kwargs)
-        Vote.objects.create(voter=self.author, value=1, comment=self)
+        if add_vote:
+            Vote.objects.create(voter=self.author, value=1, comment=self)
 
     def __str__(self):
         if len(self.text) < 20:
@@ -121,21 +128,7 @@ class Comment(models.Model):
         return self.text[:20] + '...'
 
 class VoteManager(models.Manager):
-    def validate(self, voter, value, post=None, comment=None):
-        if value not in [-1, 1]:
-            raise FieldError('value must be in [-1, 1]')
-        if post is None and comment is None:
-            raise FieldError('post and comment cannot both be null')
-        if post and comment:
-            raise FieldError('cannot submit vote for both post and comment')
-        if post and voter in post.voters.all():
-            raise FieldError('voter has already voted on this post')
-        if comment and voter in comment.voters.all():
-            raise FieldError('voter has already voted on this comment')
-        return True
-
     def create(self, voter, value, post=None, comment=None):
-        self.validate(voter, value, post, comment)
         vote = self.model(
             voter=voter,
             value=value,
@@ -155,3 +148,35 @@ class Vote(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, null=True, blank=True)
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True, blank=True)
     objects = VoteManager()
+
+    def validate(self):
+        if self.value not in [-1, 1]:
+            raise FieldError('value must be in [-1, 1]')
+        if self.post is None and self.comment is None:
+            raise FieldError('post and comment cannot both be null')
+        if self.post and self.comment:
+            raise FieldError('cannot submit vote for both post and comment')
+        if self.pk is None and self.post and self.voter in self.post.voters.all():
+            raise FieldError('voter has already voted on this post')
+        if self.pk is None and self.comment and self.voter in self.comment.voters.all():
+            raise FieldError('voter has already voted on this comment')
+        return True
+
+    def save(self, *args, **kwargs):
+        self.validate()
+        super(Vote, self).save(*args, **kwargs)
+        if self.comment:
+            self.comment.votes = sum(v.value for v in self.comment.vote_set.all())
+            self.comment.save()
+        if self.post:
+            self.post.votes = sum(v.value for v in self.vote_set.all())
+            self.post.save()
+
+    def delete(self, *args, **kwargs):
+        if self.comment:
+            self.comment.votes -= self.value
+            self.comment.save()
+        if self.post:
+            self.post.votes -= self.value
+            self.post.save()
+        super(Vote, self).delete(*args, **kwargs)

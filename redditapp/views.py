@@ -23,7 +23,7 @@ from .renderers import UserJSONRenderer
 
 def posts(request):
     post_data = []
-    for p in Post.objects.filter(is_deleted=False).order_by('-created'):
+    for p in Post.objects.filter(is_deleted=False).order_by('-votes', '-created'):
         post_data.append({
             'id': p.id,
             'title': p.title,
@@ -32,14 +32,14 @@ def posts(request):
             'is_link': p.is_link,
             'link': p.link,
             'numComments': len(p.comment_set.all()),
-            'score': sum(v.value for v in p.vote_set.all())
+            'score': p.votes
         })
     return JsonResponse({'posts': post_data})
 
 def subreddit(request, subreddit_name):
     sub = Subreddit.objects.get(name=subreddit_name)
     post_data = []
-    for p in sub.post_set.filter(is_deleted=False).order_by('-created'):
+    for p in sub.post_set.filter(is_deleted=False).order_by('-votes', '-created'):
         post_data.append({
             'id': p.id,
             'title': p.title,
@@ -48,7 +48,7 @@ def subreddit(request, subreddit_name):
             'slug': p.slug,
             'subreddit': sub.name,
             'numComments': len(p.comment_set.all()),
-            'score': sum(v.value for v in p.vote_set.all())
+            'score': p.votes
         })
     return JsonResponse({'posts': post_data})
 
@@ -76,10 +76,10 @@ def serialize_comments(request, comments):
             'id': c.pk,
             'created': c.created,
             'last_modified': c.last_modified,
-            'score': sum(v.value for v in c.vote_set.all()),
+            'score': c.votes,
             'upvoted': request.user.is_authenticated and voted(1),
             'downvoted': request.user.is_authenticated and voted(-1),
-            'child_comments': serialize_comments(request, c.comment_set.all()),
+            'child_comments': serialize_comments(request, c.comment_set.all().order_by('-votes', 'created')),
         })
         serialized_comments.append(s)
     return serialized_comments
@@ -87,16 +87,16 @@ def serialize_comments(request, comments):
 @api_view(['GET'])
 def comments_page(request, subreddit_name, pk, post_slug):
     post = Post.objects.get(pk=pk)
-    top_comments = post.comment_set.filter(parent_comment=None)
+    top_comments = post.comment_set.filter(parent_comment=None).order_by('-votes', 'created')
     serialized_comments = serialize_comments(request, top_comments)
     post_data = {
         'id': post.pk,
-        'numComments': len(post.comment_set.all()),
+        'numComments': post.comment_set.count(),
         'slug': post.slug,
         'subreddit': post.subreddit.name,
         'created': post.created,
         'last_modified': post.last_modified,
-        'score': sum(v.value for v in post.vote_set.all()),
+        'score': post.votes,
         'link': post.link,
         'is_link': post.is_link,
         'comments': serialized_comments
@@ -226,7 +226,7 @@ class CreateCommentView(CreateAPIView):
         d = serializer.data
         d['child_comments'] = []
         d['author'] = request.user.username
-        d['score'] = sum(v.value for v in comment.vote_set.all())
+        d['score'] = comment.votes
         d['last_modified'] = comment.last_modified
         d['id'] = comment.pk
         d['upvoted'] = True
@@ -256,5 +256,5 @@ class VoteOnComment(APIView):
             elif data['value'] == 0:
                 vote.delete()
         return Response({
-            'comment': serialize_comments(request, [comment])[0]
+            'comment': serialize_comments(request, [Comment.objects.get(pk=data['comment_id'])])[0]
         }, status=status.HTTP_201_CREATED)
