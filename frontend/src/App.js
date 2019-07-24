@@ -130,11 +130,10 @@ class Comment extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      comment: this.props.comment
+      comment: this.props.comment,
     };
     this.updateChildComments = this.updateChildComments.bind(this);
     this.vote = this.vote.bind(this);
-    this.cancelVote = this.cancelVote.bind(this);
   }
 
   updateChildComments(newComment) {
@@ -143,7 +142,7 @@ class Comment extends Component {
         ...prevState,
         comment: {
           ...prevState.comment,
-          child_comments: prevState.comment.child_comments.concat(newComment)
+          child_comments: [newComment].concat(prevState.comment.child_comments)
         }
       };
     });
@@ -189,10 +188,6 @@ class Comment extends Component {
         });
     });
     return makeVote;
-  }
-
-  cancelVote() {
-    alert('Youre cancelling this vote!');
   }
 
   render() {
@@ -273,10 +268,10 @@ class Comment extends Component {
                   updateParent={this.updateChildComments}
                   parent_comment_id={this.state.comment.id}
                 />
-                {this.state.comment.child_comments.map((c, idx) => {
+                {this.state.comment.child_comments.map((c) => {
                   return (
                     <Comment
-                      key={idx}
+                      key={c.id}
                       comment={c}
                       post={post}
                       updatePost={updatePost}
@@ -300,7 +295,7 @@ function getHeader(post) {
         <a href={post.link} target="_blank" rel="noopener noreferrer">
           {post.title}
         </a>
-        </h1>
+      </h1>
     );
     postText = '';
   } else {
@@ -321,7 +316,8 @@ class CommentsPage extends Component {
     super(props);
     this.state = {};
     this.updateComments = this.updateComments.bind(this);
-
+    this.updatePost = this.updatePost.bind(this);
+    this.addNewComment = this.addNewComment.bind(this);
   }
 
   updateComments() {
@@ -341,6 +337,28 @@ class CommentsPage extends Component {
         return response.json();
       })
       .then(data => this.setState({post: data.post}));
+  }
+
+  updatePost() {
+    this.setState((state) => {
+      return {
+        post: {
+          ...state.post,
+          numComments: state.post.numComments + 1
+        }
+      };
+    });
+  }
+
+  addNewComment(newComment) {
+    this.setState((state) => {
+      return {
+        post: {
+          ...state.post,
+          comments: [newComment, ...state.post.comments]
+        }
+      };
+    });
   }
 
   componentDidMount() {
@@ -365,17 +383,17 @@ class CommentsPage extends Component {
         <hr />
         <CommentForm
           postId={this.state.post.id}
-          updatePost={this.updateComments}
-          updateParent={(x)=>{}}
+          updatePost={this.updatePost}
+          updateParent={this.addNewComment}
           topComment={true}
         />
-        {post.comments.map((comment, idx) => {
+        {post.comments.map((comment) => {
           return (
             <Comment
-              key={idx}
+              key={comment.id}
               comment={comment}
               post={this.state.post}
-              updatePost={this.updateComments}
+              updatePost={this.updatePost}
             />
           );
         })}
