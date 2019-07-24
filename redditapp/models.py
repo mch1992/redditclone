@@ -4,6 +4,7 @@ from django.utils.text import slugify
 from datetime import datetime, timedelta
 import jwt
 from django.conf import settings
+from django.core.exceptions import FieldError
 
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None, email=None):
@@ -45,7 +46,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def get_short_name(self):
         return self.username
-    
+
     @property
     def token(self):
         return self._generate_jwt_token()
@@ -110,10 +111,41 @@ class Comment(models.Model):
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('comment', 'voter'), related_name='comment_voters')
 
+    def save(self, *args, **kwargs):
+        super(Comment, self).save(*args, **kwargs)
+        Vote.objects.create(voter=self.author, value=1, comment=self)
+
     def __str__(self):
         if len(self.text) < 20:
             return self.text
         return self.text[:20] + '...'
+
+class VoteManager(models.Manager):
+    def validate(self, voter, value, post=None, comment=None):
+        if value not in [-1, 1]:
+            raise FieldError('value must be in [-1, 1]')
+        if post is None and comment is None:
+            raise FieldError('post and comment cannot both be null')
+        if post and comment:
+            raise FieldError('cannot submit vote for both post and comment')
+        if post and voter in post.voters.all():
+            raise FieldError('voter has already voted on this post')
+        if comment and voter in comment.voters.all():
+            raise FieldError('voter has already voted on this comment')
+        return True
+
+    def create(self, voter, value, post=None, comment=None):
+        self.validate(voter, value, post, comment)
+        vote = self.model(
+            voter=voter,
+            value=value,
+            is_post=bool(post),
+            is_comment=bool(comment),
+            post=post,
+            comment=comment
+        )
+        vote.save()
+        return vote
 
 class Vote(models.Model):
     voter = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -122,3 +154,4 @@ class Vote(models.Model):
     is_comment = models.BooleanField()
     post = models.ForeignKey(Post, on_delete=models.CASCADE, null=True, blank=True)
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True, blank=True)
+    objects = VoteManager()

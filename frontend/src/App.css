@@ -39,3 +39,16 @@ ul {
 .hide {
     display: none;
 }
+
+.comment-body {
+    margin-left: 10px;
+}
+
+.sm-margin-right {
+    margin-right: 10px;
+}
+
+.upvote {
+    margin-top: 5px;
+    margin-bottom: 5px;
+}

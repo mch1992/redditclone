@@ -3,8 +3,15 @@ from django.http import JsonResponse
 from django.views import View
 from django.contrib.auth import authenticate
 import jwt
+from rest_framework.decorators import api_view
 from rest_framework import status
-from rest_framework.generics import RetrieveUpdateAPIView, CreateAPIView, ListAPIView
+from rest_framework.views import APIView
+from rest_framework.generics import (
+    RetrieveUpdateAPIView,
+    CreateAPIView,
+    ListAPIView,
+    UpdateAPIView
+)
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -45,7 +52,12 @@ def subreddit(request, subreddit_name):
         })
     return JsonResponse({'posts': post_data})
 
-def serialize_comments(comments):
+def vote(user, comment):
+    def voted(value):
+        return bool(user.vote_set.filter(comment=comment, value=value))
+    return voted
+
+def serialize_comments(request, comments):
     serialized_comments = []
     for c in comments:
         s = {}
@@ -59,21 +71,24 @@ def serialize_comments(comments):
                 'author': c.author.username,
                 'text': c.text
             })
+        voted = vote(request.user, c)
         s.update({
             'id': c.pk,
             'created': c.created,
             'last_modified': c.last_modified,
             'score': sum(v.value for v in c.vote_set.all()),
-            'child_comments': serialize_comments(c.comment_set.all())
+            'upvoted': request.user.is_authenticated and voted(1),
+            'downvoted': request.user.is_authenticated and voted(-1),
+            'child_comments': serialize_comments(request, c.comment_set.all()),
         })
         serialized_comments.append(s)
     return serialized_comments
 
-
+@api_view(['GET'])
 def comments_page(request, subreddit_name, pk, post_slug):
     post = Post.objects.get(pk=pk)
     top_comments = post.comment_set.filter(parent_comment=None)
-    serialized_comments = serialize_comments(top_comments)
+    serialized_comments = serialize_comments(request, top_comments)
     post_data = {
         'id': post.pk,
         'numComments': len(post.comment_set.all()),
@@ -167,7 +182,7 @@ class CreateSubredditView(CreateAPIView):
 class CreatePostView(CreateAPIView):
     permission_classes = (IsAuthenticated,)
     renderer_classes = (JSONRenderer,)
-    serializer_class = CreatePostSerializer
+    serializer_class = PostSerializer
 
     def create(self, request, subreddit_name, *args, **kwargs):
         author = request.user
@@ -192,7 +207,7 @@ class CreatePostView(CreateAPIView):
 class CreateCommentView(CreateAPIView):
     permission_classes = (IsAuthenticated,)
     renderer_classes = (JSONRenderer,)
-    serializer_class = CreateCommentSerializer
+    serializer_class = CommentSerializer
 
     def create(self, request, *args, **kwargs):
         author = request.user
@@ -211,11 +226,35 @@ class CreateCommentView(CreateAPIView):
         d = serializer.data
         d['child_comments'] = []
         d['author'] = request.user.username
-        d['score'] = sum(v for v in comment.vote_set.all())
+        d['score'] = sum(v.value for v in comment.vote_set.all())
         d['last_modified'] = comment.last_modified
         d['id'] = comment.pk
+        d['upvoted'] = True
         return Response(d, status=status.HTTP_201_CREATED)
 
 class SubredditList(ListAPIView):
     queryset = Subreddit.objects.filter(is_deleted=False).order_by('name')
     serializer_class = SubredditSerializer
+
+class VoteOnComment(APIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = CommentSerializer
+    renderer_classes = (JSONRenderer,)
+
+    def post(self, request, *args, **kwargs):
+        voter = request.user
+        data = request.data.get('vote', {})
+        comment = Comment.objects.get(pk=data['comment_id'])
+        try:
+            vote = Vote.objects.get(voter=voter, comment=comment)
+        except Vote.DoesNotExist:
+            vote = Vote.objects.create(voter, data['value'], comment=comment)
+        else:
+            if data['value'] in [-1, 1]:
+                vote.value = data['value']
+                vote.save()
+            elif data['value'] == 0:
+                vote.delete()
+        return Response({
+            'comment': serialize_comments(request, [comment])[0]
+        }, status=status.HTTP_201_CREATED)

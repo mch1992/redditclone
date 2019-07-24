@@ -9,6 +9,8 @@ import Alert from 'react-bootstrap/Alert';
 import Navbar from 'react-bootstrap/Navbar';
 import Nav from 'react-bootstrap/Nav';
 import ListGroup from 'react-bootstrap/ListGroup';
+import Media from 'react-bootstrap/Media';
+import ButtonToolbar from 'react-bootstrap/ButtonToolbar';
 import './App.css';
 
 class CommentForm extends Component {
@@ -79,7 +81,15 @@ class CommentForm extends Component {
     let replyLink = '';
     let cancelButton = '';
     if (!this.props.topComment) {
-      replyLink = <Button variant="link" onClick={this.showReplyForm}>reply</Button>;
+      replyLink = (
+        <Button
+          variant="link"
+          size="sm"
+          onClick={this.showReplyForm}
+        >
+          reply
+        </Button>
+      );
       cancelButton = (
         <Button
           variant="secondary"
@@ -105,8 +115,10 @@ class CommentForm extends Component {
             />
           </Form.Group>
           <Form.Group as={Col}>
-            <Button type="submit">Save</Button>
-            {cancelButton}
+            <ButtonToolbar>
+              <Button type="submit">Save</Button>
+              {cancelButton}
+            </ButtonToolbar>
           </Form.Group>
         </Form>
       </div>
@@ -118,45 +130,162 @@ class Comment extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      childComments: this.props.comment.child_comments
+      comment: this.props.comment
     };
     this.updateChildComments = this.updateChildComments.bind(this);
+    this.vote = this.vote.bind(this);
+    this.cancelVote = this.cancelVote.bind(this);
   }
 
   updateChildComments(newComment) {
-    this.setState((state, props) => {
-      console.log(this.props.comment);
-      console.log(state.childComments);
-      return {childComments: state.childComments.concat(newComment)};
+    this.setState((prevState, props) => {
+      return {
+        ...prevState,
+        comment: {
+          ...prevState.comment,
+          child_comments: prevState.comment.child_comments.concat(newComment)
+        }
+      };
     });
   }
 
+  vote(value) {
+    const makeVote = (() => {
+      this.setState((prevState) => {
+        let newScore = prevState.comment.score;
+        if (prevState.comment.upvoted) {
+          newScore -= 1;
+        } else if (prevState.comment.downvoted) {
+          newScore += 1;
+        }
+        return {
+          ...prevState,
+          comment: {
+            ...prevState.comment,
+            upvoted: value === 1,
+            downvoted: value === -1,
+            score: newScore + value
+          }
+        };
+      });
+      fetch('/comment/vote/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${localStorage.getItem('jwtToken')}`
+        },
+        body: JSON.stringify({
+          vote: {
+            comment_id: this.state.comment.id,
+            value: value
+          }
+        })
+      })
+        .then(response => response.json())
+        .then(data => {
+          this.setState({
+            comment: data.comment
+          });
+        });
+    });
+    return makeVote;
+  }
+
+  cancelVote() {
+    alert('Youre cancelling this vote!');
+  }
+
   render() {
-    const { author, score, text, last_modified } = this.props.comment;
+    const { author, score, text, last_modified, upvoted, downvoted } = this.state.comment;
     const { post, updatePost } = this.props;
+    let upvoteButton = (
+      <Button
+        variant="outline-primary"
+        size="sm"
+        className="upvote"
+        onClick={this.vote(1)}
+      >
+        ▲
+      </Button>
+    );
+    if (authenticated() && upvoted) {
+      upvoteButton = (
+        <Button
+          variant="primary"
+          size="sm"
+          className="upvote"
+          onClick={this.vote(0)}
+        >
+          ▲
+        </Button>
+      );
+    }
+    let downvoteButton = (
+      <Button
+        variant="outline-danger"
+        size="sm"
+        onClick={this.vote(-1)}
+        className="downvote"
+      >
+        ▼
+      </Button>
+    );
+    if (authenticated() && downvoted) {
+      downvoteButton = (
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={this.vote(0)}
+          className="downvote"
+        >
+          ▼
+        </Button>
+      );
+    }
     return (
       <ListGroup>
         <ListGroup.Item>
-          <div>
-            <p>{author} {score} point{score === 1 ? '' : 's'} {last_modified}</p>
-            <p>{text}</p>
-            <CommentForm
-              postId={post.id}
-              updatePost={updatePost}
-              updateParent={this.updateChildComments}
-              parent_comment_id={this.props.comment.id}
-            />
-            {this.state.childComments.map((c, idx) => {
-              return (
-                <Comment
-                  key={idx}
-                  comment={c}
-                  post={post}
+          <Media>
+            <div>
+              {upvoteButton}
+              <br />
+              {downvoteButton}
+            </div>
+            <Media.Body>
+              <div className="comment-body">
+                <p>
+                  <small>
+                    <Link to={`/users/${author}`} className="sm-margin-right">
+                      {author}
+                    </Link>
+                    <strong className="sm-margin-right">
+                      {score} point{score === 1 ? '' : 's'}
+                    </strong>
+                    <span className="text-muted">
+                      {last_modified}
+                    </span>
+                  </small>
+                </p>
+                <p>{text}</p>
+                <CommentForm
+                  postId={post.id}
                   updatePost={updatePost}
+                  updateParent={this.updateChildComments}
+                  parent_comment_id={this.state.comment.id}
                 />
-              );
-            })}
-          </div>
+                {this.state.comment.child_comments.map((c, idx) => {
+                  return (
+                    <Comment
+                      key={idx}
+                      comment={c}
+                      post={post}
+                      updatePost={updatePost}
+                    />
+                  );
+                })}
+              </div>
+            </Media.Body>
+          </Media>
         </ListGroup.Item>
       </ListGroup>
     );
@@ -197,7 +326,14 @@ class CommentsPage extends Component {
 
   updateComments() {
     const {name, id, slug} = this.props.match.params;
-    fetch(`/r/${name}/${id}/${slug}/comments/`)
+    let headers = {};
+    if (authenticated()) {
+      headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${localStorage.getItem('jwtToken')}`
+      };
+    }
+    fetch(`/r/${name}/${id}/${slug}/comments/`, { headers })
       .then(response => {
         if (response.status !== 200) {
           console.warn('uh oh');
@@ -374,6 +510,7 @@ class RegistrationLoginForm extends Component {
           localStorage.setItem('username', data.user.username);
           localStorage.setItem('jwtToken', data.user.token);
           this.props.login(data.user);
+          window.location.reload();
         }
       });
     event.preventDefault();
@@ -561,7 +698,6 @@ class CreatePost extends Component {
   }
 
   handleSubmit(event) {
-    console.log(this.state.link);
     fetch(`/r/${this.props.match.params.name}/create-post/`, {
       method: 'POST',
       headers: {
@@ -589,7 +725,6 @@ class CreatePost extends Component {
     this.setState({
       [event.target.name]: event.target.value
     });
-    console.log(event.target.name, ':', event.target.value);
   }
 
   render() {
@@ -710,10 +845,7 @@ class App extends Component {
 
   logout() {
     localStorage.clear();
-    this.setState({
-      loggedIn: false,
-      user: undefined
-    });
+    window.location.reload();
   }
 
   componentDidMount() {
