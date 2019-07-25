@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils.text import slugify
@@ -99,9 +99,10 @@ class Post(models.Model):
     def save(self, *args, **kwargs):
         self.slug = slugify(self.title)
         add_vote = self.pk is None
-        super(Post, self).save(*args, **kwargs)
-        if add_vote:
-            Vote.objects.create(voter=self.author, value=1, post=self)
+        with transaction.atomic():
+            super(Post, self).save(*args, **kwargs)
+            if add_vote:
+                Vote.objects.create(voter=self.author, value=1, post=self)
 
     def __str__(self):
         return '/r/' + self.subreddit.name + ' -- ' + self.title
@@ -119,9 +120,10 @@ class Comment(models.Model):
 
     def save(self, *args, **kwargs):
         add_vote = self.pk is None
-        super(Comment, self).save(*args, **kwargs)
-        if add_vote:
-            Vote.objects.create(voter=self.author, value=1, comment=self)
+        with transaction.atomic():
+            super(Comment, self).save(*args, **kwargs)
+            if add_vote:
+                Vote.objects.create(voter=self.author, value=1, comment=self)
 
     def __str__(self):
         if len(self.text) < 20:
@@ -165,21 +167,23 @@ class Vote(models.Model):
 
     def save(self, *args, **kwargs):
         self.validate()
-        super(Vote, self).save(*args, **kwargs)
-        if self.comment:
-            value__sum = self.comment.vote_set.aggregate(Sum('value'))
-            self.comment.votes = value__sum['value__sum']
-            self.comment.save()
-        if self.post:
-            value__sum = self.post.vote_set.aggregate(Sum('value'))
-            self.post.votes = value__sum['value__sum']
-            self.post.save()
+        with transaction.atomic():
+            super(Vote, self).save(*args, **kwargs)
+            if self.comment:
+                value__sum = self.comment.vote_set.aggregate(Sum('value'))
+                self.comment.votes = value__sum['value__sum']
+                self.comment.save()
+            if self.post:
+                value__sum = self.post.vote_set.aggregate(Sum('value'))
+                self.post.votes = value__sum['value__sum']
+                self.post.save()
 
     def delete(self, *args, **kwargs):
-        if self.comment:
-            self.comment.votes -= self.value
-            self.comment.save()
-        if self.post:
-            self.post.votes -= self.value
-            self.post.save()
-        super(Vote, self).delete(*args, **kwargs)
+        with transaction.atomic():
+            if self.comment:
+                self.comment.votes -= self.value
+                self.comment.save()
+            if self.post:
+                self.post.votes -= self.value
+                self.post.save()
+            super(Vote, self).delete(*args, **kwargs)
