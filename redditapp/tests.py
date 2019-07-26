@@ -3,6 +3,48 @@ from django.urls import reverse
 from .models import *
 
 class EditCommentViewTests(TestCase):
+    def test_user_must_have_jwt_token_to_edit(self):
+        """
+        A user can only edit their comments if an authorization header token
+        is submitted
+        """
+        user = User.objects.create_user('user', 'password')
+        sub = Subreddit.objects.create('TestSubreddit', user)
+        post = Post.objects.create(
+            title='Test post please ignore',
+            subreddit=sub,
+            is_link=False,
+            author=user
+        )
+        original_text = 'comment'
+        comment = Comment.objects.create(
+            post=post,
+            author=user,
+            text=original_text
+        )
+        edited_text = 'edit'
+        response = self.client.patch(
+            reverse('redditapp:edit_comment', args=[comment.pk]),
+            {
+                'text': edited_text
+            },
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 403)
+        comment.refresh_from_db()
+        self.assertEqual(comment.text, original_text)
+        response = self.client.patch(
+            reverse('redditapp:edit_comment', args=[comment.pk]),
+            {
+                'text': edited_text
+            },
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'Token {user.token}'
+        )
+        self.assertEqual(response.status_code, 200)
+        comment.refresh_from_db()
+        self.assertEqual(comment.text, edited_text)
+
     def test_user_can_only_edit_own_comments(self):
         """
         A user can only edit comments of which they are the author.
@@ -24,13 +66,13 @@ class EditCommentViewTests(TestCase):
             text=original_text
         )
 
-        response = self.client.put(
+        response = self.client.patch(
             reverse('redditapp:edit_comment', args=[user1_comment.pk]),
             {
                 'text': 'user2 has edited this comment'
             },
             content_type='application/json',
-            AUTHORIZATION=f'Token {user2.token}'
+            HTTP_AUTHORIZATION=f'Token {user2.token}'
         )
         self.assertEqual(response.status_code, 403)
         user1_comment.refresh_from_db()
