@@ -31,6 +31,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'guardian',
     'rest_framework',
     'redditapp.apps.RedditappConfig',
     'django.contrib.admin',
@@ -133,3 +134,8 @@ REST_FRAMEWORK = {
         'redditapp.backends.JWTAuthentication',
     )
 }
+
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend', # default
+    'guardian.backends.ObjectPermissionBackend',
+)

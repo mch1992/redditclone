@@ -13,6 +13,13 @@ import Media from 'react-bootstrap/Media';
 import ButtonToolbar from 'react-bootstrap/ButtonToolbar';
 import './App.css';
 
+function getRequestHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Token ${localStorage.getItem('jwtToken')}`
+  };
+}
+
 class CommentForm extends Component {
   constructor(props) {
     super(props);
@@ -22,7 +29,8 @@ class CommentForm extends Component {
     this.showReplyForm = this.showReplyForm.bind(this);
     this.hideReplyForm = this.hideReplyForm.bind(this);
     this.state = {
-      formClass: (this.props.topComment ? 'show' : 'hide')
+      handleSubmit: this.props.handleSubmit || this.handleSubmit,
+      handleChange: this.props.handleChange || this.handleChange
     };
   }
 
@@ -46,9 +54,7 @@ class CommentForm extends Component {
         this.props.updatePost(data);
         this.props.updateParent(data);
         if (!this.props.topComment) {
-          this.setState({
-            formClass: 'hide'
-          });
+          this.props.hideForm();
         }
       });
 
@@ -93,7 +99,7 @@ class CommentForm extends Component {
       cancelButton = (
         <Button
           variant="secondary"
-          onClick={this.hideReplyForm}
+          onClick={this.props.hideForm}
         >
           Cancel
         </Button>
@@ -101,17 +107,17 @@ class CommentForm extends Component {
     }
     return (
       <div>
-        {replyLink}
-        <Form onSubmit={this.handleSubmit} className={this.state.formClass}>
+        <Form onSubmit={this.state.handleSubmit}>
           <Form.Group as={Col} md="5" controlId="text">
             <Form.Label>Speaking as {localStorage.getItem('username')}</Form.Label>
             <Form.Control
-              onChange={this.handleChange}
+              onChange={this.state.handleChange}
               as="textarea"
               name="text"
               placeholder="Comment"
               rows="5"
               ref={this.textarea}
+              value={this.props.initialValue}
             />
           </Form.Group>
           <Form.Group as={Col}>
@@ -131,9 +137,25 @@ class Comment extends Component {
     super(props);
     this.state = {
       comment: this.props.comment,
+      replyFormClass: 'hide',
+      toolBarClass: 'show',
+      editFormClass: 'hide',
+      commentBodyClass: 'show',
+      text: this.props.comment.text
     };
+    if (this.props.comment.author === localStorage.getItem('username')) {
+      this.state.isAuthorClass = 'show';
+    } else {
+      this.state.isAuthorClass = 'hide';
+    }
     this.updateChildComments = this.updateChildComments.bind(this);
     this.vote = this.vote.bind(this);
+    this.showCommentForm = this.showCommentForm.bind(this);
+    this.hideCommentForm = this.hideCommentForm.bind(this);
+    this.clickEdit = this.clickEdit.bind(this);
+    this.hideEditForm = this.hideEditForm.bind(this);
+    this.submitEdit = this.submitEdit.bind(this);
+    this.getEditText = this.getEditText.bind(this);
   }
 
   updateChildComments(newComment) {
@@ -188,6 +210,64 @@ class Comment extends Component {
         });
     });
     return makeVote;
+  }
+
+  showCommentForm() {
+    this.setState({
+      replyFormClass: 'show'
+    });
+  }
+
+  hideCommentForm() {
+    this.setState({
+      replyFormClass: 'hide'
+    });
+  }
+
+  clickEdit() {
+    this.setState({
+      editFormClass: 'show',
+      commentBodyClass: 'hide',
+      toolBarClass: 'hide'
+    });
+  }
+
+  hideEditForm() {
+    this.setState({
+      editFormClass: 'hide',
+      commentBodyClass: 'show',
+      toolBarClass: 'show'
+    });
+  }
+
+  getEditText(event) {
+    if (event.target.name === 'text') {
+      this.setState({
+        text: event.target.value
+      });
+    }
+  }
+
+  submitEdit(event) {
+    fetch(`/comment/${this.state.comment.id}/`, {
+      method: 'PATCH',
+      headers: getRequestHeaders(),
+      body: JSON.stringify({
+        text: this.state.text
+      })
+    })
+      .then(response => response.json())
+      .then(data => {
+        this.setState((state) => ({
+          comment: {
+            ...state.comment,
+            text: data.text,
+            last_modified: data.last_modified
+          }
+        }));
+        this.hideEditForm();
+      });
+    event.preventDefault();
   }
 
   render() {
@@ -247,7 +327,16 @@ class Comment extends Component {
               {downvoteButton}
             </div>
             <Media.Body>
-              <div className="comment-body">
+              <div className={this.state.editFormClass}>
+                <CommentForm
+                  postId={post.id}
+                  initialValue={this.state.text}
+                  hideForm={this.hideEditForm}
+                  handleSubmit={this.submitEdit}
+                  handleChange={this.getEditText}
+                />
+              </div>
+              <div className={`comment-body ${this.state.commentBodyClass}`}>
                 <p>
                   <small>
                     <Link to={`/users/${author}`} className="sm-margin-right">
@@ -262,23 +351,48 @@ class Comment extends Component {
                   </small>
                 </p>
                 <p>{text}</p>
-                <CommentForm
-                  postId={post.id}
-                  updatePost={updatePost}
-                  updateParent={this.updateChildComments}
-                  parent_comment_id={this.state.comment.id}
-                />
-                {this.state.comment.child_comments.map((c) => {
-                  return (
-                    <Comment
-                      key={c.id}
-                      comment={c}
-                      post={post}
-                      updatePost={updatePost}
-                    />
-                  );
-                })}
+                <div className={this.state.toolBarClass}>
+                  <ButtonToolbar>
+                    <Button variant="link" size="sm">permalink</Button>
+                    <div className={this.state.isAuthorClass}>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={this.clickEdit}
+                      >
+                        edit
+                      </Button>
+                      <Button variant="link" size="sm">delete</Button>
+                    </div>
+                    {authenticated() && <Button
+                      variant="link"
+                      size="sm"
+                      onClick={this.showCommentForm}
+                    >
+                      reply
+                     </Button>}
+                  </ButtonToolbar>
+                </div>
+                <div className={this.state.replyFormClass}>
+                  <CommentForm
+                    postId={post.id}
+                    updatePost={updatePost}
+                    updateParent={this.updateChildComments}
+                    parent_comment_id={this.state.comment.id}
+                    hideForm={this.hideCommentForm}
+                  />
+                </div>
               </div>
+              {this.state.comment.child_comments.map((c) => {
+                return (
+                  <Comment
+                    key={c.id}
+                    comment={c}
+                    post={post}
+                    updatePost={updatePost}
+                  />
+                );
+              })}
             </Media.Body>
           </Media>
         </ListGroup.Item>
@@ -386,6 +500,7 @@ class CommentsPage extends Component {
           updatePost={this.updatePost}
           updateParent={this.addNewComment}
           topComment={true}
+          show={true}
         />
         {post.comments.map((comment) => {
           return (

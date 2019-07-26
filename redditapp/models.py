@@ -6,6 +6,18 @@ from datetime import datetime, timedelta
 import jwt
 from django.conf import settings
 from django.core.exceptions import FieldError
+from django.contrib.auth.models import Permission
+from guardian.shortcuts import assign_perm
+
+def get_perm(codename):
+    return Permission.objects.get(content_type__app_label='redditapp', codename=codename)
+
+def get_model_perms():
+    perms = []
+    for op in ['change', 'delete']:
+        for model_name in ['comment', 'post']:
+            perms.append(get_perm(f'{op}_{model_name}'))
+    return perms
 
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None, email=None):
@@ -13,17 +25,20 @@ class UserManager(BaseUserManager):
             raise TypeError('Users must have a username')
         user = self.model(username=username, email=email)
         user.set_password(password)
-        user.save()
+        with transaction.atomic():
+            user.save()
+            user.user_permissions.add(*get_model_perms())
         return user
 
     def create_superuser(self, username, password, email=None):
         if password is None:
             raise TypeError('Superusers must have a password')
 
-        user = self.create_user(username, password, email)
-        user.is_superuser = True
-        user.is_staff = True
-        user.save()
+        with transaction.atomic():
+            user = self.create_user(username, password, email)
+            user.is_superuser = True
+            user.is_staff = True
+            user.save()
         return user
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -65,9 +80,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 class SubredditManager(models.Manager):
     def create(self, name, creator):
         subreddit = self.model(name=name, creator=creator)
-        subreddit.save()
-        subreddit.moderators.add(creator)
-        subreddit.subscribers.add(creator)
+        with transaction.atomic():
+            subreddit.save()
+            subreddit.moderators.add(creator)
+            subreddit.subscribers.add(creator)
         return subreddit
 
 class Subreddit(models.Model):
@@ -98,11 +114,13 @@ class Post(models.Model):
 
     def save(self, *args, **kwargs):
         self.slug = slugify(self.title)
-        add_vote = self.pk is None
+        new_record = self.pk is None
         with transaction.atomic():
             super(Post, self).save(*args, **kwargs)
-            if add_vote:
+            if new_record:
                 Vote.objects.create(voter=self.author, value=1, post=self)
+                assign_perm('redditapp.change_post', self.author, self)
+                assign_perm('redditapp.delete_post', self.author, self)
 
     def __str__(self):
         return '/r/' + self.subreddit.name + ' -- ' + self.title
@@ -119,11 +137,13 @@ class Comment(models.Model):
     votes = models.IntegerField(default=0)
 
     def save(self, *args, **kwargs):
-        add_vote = self.pk is None
+        new_record = self.pk is None
         with transaction.atomic():
             super(Comment, self).save(*args, **kwargs)
-            if add_vote:
+            if new_record:
                 Vote.objects.create(voter=self.author, value=1, comment=self)
+                assign_perm('redditapp.change_comment', self.author, self)
+                assign_perm('redditapp.delete_comment', self.author, self)
 
     def __str__(self):
         if len(self.text) < 20:

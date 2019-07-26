@@ -12,7 +12,7 @@ from rest_framework.generics import (
     ListAPIView,
     UpdateAPIView
 )
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, DjangoObjectPermissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.renderers import JSONRenderer
@@ -231,6 +231,12 @@ class CreateCommentView(CreateAPIView):
         d['id'] = comment.pk
         d['upvoted'] = True
         return Response(d, status=status.HTTP_201_CREATED)
+
+class EditCommentView(UpdateAPIView):
+    permission_classes = (IsAuthenticated, DjangoObjectPermissions)
+    renderer_classes = (JSONRenderer,)
+    serializer_class = CommentSerializer
+    queryset = Comment.objects.all()
 
 class SubredditList(ListAPIView):
     queryset = Subreddit.objects.filter(is_deleted=False).order_by('name')
