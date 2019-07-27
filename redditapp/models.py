@@ -2,6 +2,7 @@ from django.db import models, transaction
 from django.db.models import Sum
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils.text import slugify
+from django.utils import timezone
 from datetime import datetime, timedelta
 import jwt
 from django.conf import settings
@@ -18,6 +19,29 @@ def get_model_perms():
         for model_name in ['comment', 'post']:
             perms.append(get_perm(f'{op}_{model_name}'))
     return perms
+
+def pluralize(value, unit):
+    if value == 1:
+        return f'1 {unit} ago'
+    return f'{value} {unit}s ago'
+
+def time_ago(dt):
+    t = timezone.now() - dt
+    if t.days == 0:
+        if t.seconds < 60:
+            return 'just now'
+        if t.seconds < 3600:
+            return pluralize(t.seconds//60, 'minute')
+        if t.seconds < 3600 * 24:
+            return pluralize(t.seconds//3600, 'hour')
+    if t.days < 30:
+        return pluralize(t.days, 'day')
+    if t.days < 365:
+        return pluralize(t.days//30, 'month')
+    return pluralize(t.days//365, 'year')
+
+def edited(model):
+    return (model.last_modified - model.created).seconds > 60 * 5
 
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None, email=None):
@@ -56,6 +80,11 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.username
+
+    def get_username(self):
+        if self.is_active:
+            return self.username
+        return '[deleted]'
 
     def get_full_name(self):
         return self.username
@@ -98,6 +127,11 @@ class Subreddit(models.Model):
     def __str__(self):
         return '/r/' + self.name
 
+class DeletedUser(object):
+    username = '[deleted]'
+    def get_username(self):
+        return self.username
+
 class Post(models.Model):
     title = models.CharField(max_length=300)
     subreddit = models.ForeignKey(Subreddit, on_delete=models.CASCADE)
@@ -111,6 +145,36 @@ class Post(models.Model):
     voters = models.ManyToManyField(User, through='Vote', through_fields=('post', 'voter'), related_name='post_voters')
     votes = models.IntegerField(default=0)
     slug = models.SlugField(null=False)
+
+    def get_author(self):
+        if self.is_deleted:
+            return DeletedUser()
+        return self.author
+
+    def get_text(self):
+        if self.is_deleted:
+            return '[deleted]'
+        return self.text
+
+    @property
+    def comments(self):
+        return self.comment_set.filter(parent_comment=None).order_by('-votes', 'created')
+
+    @property
+    def numComments(self):
+        return self.comment_set.count()
+
+    @property
+    def created_time_ago(self):
+        return time_ago(self.created)
+
+    @property
+    def edited_time_ago(self):
+        return time_ago(self.last_modified)
+
+    @property
+    def edited(self):
+        return edited(self)
 
     def save(self, *args, **kwargs):
         self.slug = slugify(self.title)
@@ -135,6 +199,32 @@ class Comment(models.Model):
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('comment', 'voter'), related_name='comment_voters')
     votes = models.IntegerField(default=0)
+
+    def get_text(self):
+        if self.is_deleted:
+            return '[deleted]'
+        return self.text
+
+    def get_author(self):
+        if self.is_deleted:
+            return DeletedUser()
+        return self.author
+
+    @property
+    def child_comments(self):
+        return self.comment_set.all().order_by('-votes', 'created')
+
+    @property
+    def created_time_ago(self):
+        return time_ago(self.created)
+
+    @property
+    def edited_time_ago(self):
+        return time_ago(self.last_modified)
+
+    @property
+    def edited(self):
+        return edited(self)
 
     def save(self, *args, **kwargs):
         new_record = self.pk is None

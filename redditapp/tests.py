@@ -1,6 +1,31 @@
 from django.test import TestCase
 from django.urls import reverse
 from .models import *
+from .serializers import *
+
+def create_user(username='user', password='password'):
+    user = User.objects.create_superuser(username, password)
+    return user
+
+def create_post(title='Test post please ignore'):
+    author = create_user()
+    sub = Subreddit.objects.create('TestSubreddit', author)
+    post = Post.objects.create(
+        title=title,
+        subreddit=sub,
+        is_link=False,
+        author='user'
+    )
+    return author, post
+
+def create_comment(text='comment'):
+    author, post = create_post()
+    comment = Comment.objects.create(
+        post=post,
+        author=author,
+        text=text
+    )
+    return author, post, comment
 
 class EditCommentViewTests(TestCase):
     def test_user_must_have_jwt_token_to_edit(self):

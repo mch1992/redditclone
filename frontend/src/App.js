@@ -143,7 +143,7 @@ class Comment extends Component {
       commentBodyClass: 'show',
       text: this.props.comment.text
     };
-    if (this.props.comment.author === localStorage.getItem('username')) {
+    if (this.props.comment.author.username === localStorage.getItem('username')) {
       this.state.isAuthorClass = 'show';
     } else {
       this.state.isAuthorClass = 'hide';
@@ -271,7 +271,9 @@ class Comment extends Component {
   }
 
   render() {
-    const { author, score, text, last_modified, upvoted, downvoted } = this.state.comment;
+    const {
+      author, votes, text, last_modified, upvoted, downvoted,
+      edited, created_time_ago, edited_time_ago } = this.state.comment;
     const { post, updatePost } = this.props;
     let upvoteButton = (
       <Button
@@ -339,14 +341,14 @@ class Comment extends Component {
               <div className={`comment-body ${this.state.commentBodyClass}`}>
                 <p>
                   <small>
-                    <Link to={`/users/${author}`} className="sm-margin-right">
-                      {author}
+                    <Link to={`/users/${author.username}`} className="sm-margin-right">
+                      {author.username}
                     </Link>
                     <strong className="sm-margin-right">
-                      {score} point{score === 1 ? '' : 's'}
+                      {votes} point{votes === 1 ? '' : 's'}
                     </strong>
                     <span className="text-muted">
-                      {last_modified}
+                      {created_time_ago}{edited && `* (last edited ${edited_time_ago})`}
                     </span>
                   </small>
                 </p>
@@ -415,7 +417,7 @@ function getHeader(post) {
   } else {
     header = (
       <h1>
-        <Link to={`/r/${post.subreddit}/${post.id}/${post.slug}/comments`}>
+        <Link to={`/r/${post.subreddit.name}/${post.id}/${post.slug}/comments`}>
           {post.title}
         </Link>
       </h1>
@@ -443,14 +445,16 @@ class CommentsPage extends Component {
         'Authorization': `Token ${localStorage.getItem('jwtToken')}`
       };
     }
-    fetch(`/r/${name}/${id}/${slug}/comments/`, { headers })
+    // const url = `/r/${name}/${id}/${slug}/comments/`;
+    const url = `/post/${id}/`;
+    fetch(url, { headers })
       .then(response => {
         if (response.status !== 200) {
           console.warn('uh oh');
         }
         return response.json();
       })
-      .then(data => this.setState({post: data.post}));
+      .then(data => this.setState({post: data}));
   }
 
   updatePost() {
@@ -488,11 +492,11 @@ class CommentsPage extends Component {
 
     return (
       <div>
-        <Link to={`/r/${post.subreddit}/`}>/r/{post.subreddit}</Link>
+        <Link to={`/r/${post.subreddit.name}/`}>/r/{post.subreddit.name}</Link>
         {header}
         {postText}
-        <p>{post.score} point{post.score === 1 ? '' : 's'}</p>
-        <p>Submitted at {post.created} by {post.author}</p>
+        <p>{post.votes} point{post.votes === 1 ? '' : 's'}</p>
+        <p>Submitted at {post.created} by {post.author.username}</p>
         <p>{post.numComments} comment{post.numComments === 1 ? '' : 's'}</p>
         <hr />
         <CommentForm

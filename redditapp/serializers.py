@@ -45,7 +45,7 @@ class LoginSerializer(serializers.Serializer):
             'token': user.token
         }
 
-class UserSerializer(serializers.ModelSerializer):
+class RegisterUserSerializer(serializers.ModelSerializer):
     """Handles serialization and deserialization of User objects."""
 
     password = serializers.CharField(
@@ -70,7 +70,22 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-class SubredditSerializer(serializers.ModelSerializer):
+class DynamicFieldsModelSerializer(serializers.ModelSerializer):
+    def __init__(self, *args, **kwargs):
+        exclude_fields = kwargs.pop('exclude_fields', None)
+        super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
+        if exclude_fields is not None:
+            for field_name in exclude_fields:
+                self.fields.pop(field_name)
+
+class UserSerializer(DynamicFieldsModelSerializer):
+    username = serializers.CharField(source='get_username')
+    class Meta:
+        model = User
+        fields = ('username',)
+
+class SubredditSerializer(DynamicFieldsModelSerializer):
+    creator = UserSerializer()
     class Meta:
         model = Subreddit
         fields = ('name', 'creator', 'created', 'is_deleted')
@@ -82,18 +97,89 @@ class SubredditSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('A name is required to create a subreddit.')
         if creator is None:
             raise serializers.ValidationError('A creator is required to create a subreddit.')
-        
+
         return {
             'name': name,
             'creator': creator
         }
 
-class PostSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Post
-        fields = ('title', 'subreddit', 'is_link', 'text', 'author', 'link')
+def voted(user, comment, value):
+    return user.is_authenticated and bool(user.vote_set.filter(comment=comment, value=value))
 
-class CommentSerializer(serializers.ModelSerializer):
+def voted_post(user, post, value):
+    return user.is_authenticated and bool(user.vote_set.filter(post=post, value=value))
+
+
+class RecursiveField(serializers.Serializer):
+    def to_representation(self, instance):
+        serializer = self.parent.parent.__class__(instance, context=self.context)
+        return serializer.data
+
+class CommentSerializer(DynamicFieldsModelSerializer):
+    author = UserSerializer(source='get_author')
+    upvoted = serializers.BooleanField(default=False)
+    downvoted = serializers.BooleanField(default=False)
+    child_comments = RecursiveField(many=True)
     class Meta:
         model = Comment
-        fields = ('post', 'author', 'parent_comment', 'text', 'last_modified')
+        fields = (
+            'id',
+            'author',
+            'text',
+            'last_modified',
+            'created',
+            'edited',
+            'created_time_ago',
+            'edited_time_ago',
+            'is_deleted',
+            'upvoted',
+            'downvoted',
+            'votes',
+            'child_comments'
+        )
+
+    def to_representation(self, instance):
+        data = super(CommentSerializer, self).to_representation(instance)
+        user = self.context['request'].user
+        data.update({
+            'upvoted': voted(user, instance, 1),
+            'downvoted': voted(user, instance, -1)
+        })
+        return data
+
+class PostSerializer(DynamicFieldsModelSerializer):
+    subreddit = SubredditSerializer()
+    author = UserSerializer(source='get_author')
+    text = serializers.CharField(source='get_text')
+    upvoted = serializers.BooleanField(default=False)
+    downvoted = serializers.BooleanField(default=False)
+    comments = CommentSerializer(many=True)
+    class Meta:
+        model = Post
+        fields = (
+            'id',
+            'title',
+            'subreddit',
+            'is_link',
+            'text',
+            'author',
+            'link',
+            'is_deleted',
+            'numComments',
+            'created',
+            'last_modified',
+            'slug',
+            'upvoted',
+            'downvoted',
+            'votes',
+            'comments'
+        )
+
+    def to_representation(self, instance):
+        data = super(PostSerializer, self).to_representation(instance)
+        user = self.context['request'].user
+        data.update({
+            'upvoted': voted_post(user, instance, 1),
+            'downvoted': voted_post(user, instance, -1)
+        })
+        return data

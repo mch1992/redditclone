@@ -10,7 +10,8 @@ from rest_framework.generics import (
     RetrieveUpdateAPIView,
     CreateAPIView,
     ListAPIView,
-    UpdateAPIView
+    UpdateAPIView,
+    RetrieveAPIView
 )
 from rest_framework.permissions import AllowAny, IsAuthenticated, DjangoObjectPermissions
 from rest_framework.response import Response
@@ -52,72 +53,10 @@ def subreddit(request, subreddit_name):
         })
     return JsonResponse({'posts': post_data})
 
-def vote(user, comment):
-    def voted(value):
-        return bool(user.vote_set.filter(comment=comment, value=value))
-    return voted
-
-def serialize_comments(request, comments):
-    serialized_comments = []
-    for c in comments:
-        s = {}
-        if c.is_deleted:
-            s.update({
-                'author': '[deleted]',
-                'text': '[deleted]'
-            })
-        else:
-            s.update({
-                'author': c.author.username,
-                'text': c.text
-            })
-        voted = vote(request.user, c)
-        s.update({
-            'id': c.pk,
-            'created': c.created,
-            'last_modified': c.last_modified,
-            'score': c.votes,
-            'upvoted': request.user.is_authenticated and voted(1),
-            'downvoted': request.user.is_authenticated and voted(-1),
-            'child_comments': serialize_comments(request, c.comment_set.all().order_by('-votes', 'created')),
-        })
-        serialized_comments.append(s)
-    return serialized_comments
-
-@api_view(['GET'])
-def comments_page(request, subreddit_name, pk, post_slug):
-    post = Post.objects.get(pk=pk)
-    top_comments = post.comment_set.filter(parent_comment=None).order_by('-votes', 'created')
-    serialized_comments = serialize_comments(request, top_comments)
-    post_data = {
-        'id': post.pk,
-        'numComments': post.comment_set.count(),
-        'slug': post.slug,
-        'subreddit': post.subreddit.name,
-        'created': post.created,
-        'last_modified': post.last_modified,
-        'score': post.votes,
-        'link': post.link,
-        'is_link': post.is_link,
-        'comments': serialized_comments
-    }
-    if post.is_deleted:
-        post_data.update({
-            'author': '[deleted]',
-            'text': '[deleted]'
-        })
-        if post.is_link:
-            post['title'] = post.title
-        else:
-            post['title'] = '[deleted]'
-    else:
-        post_data.update({
-            'author': post.author.username,
-            'text': post.text,
-            'title': post.title
-        })
-
-    return JsonResponse({'post': post_data})
+class CommentsPage(RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = PostSerializer
+    queryset = Post.objects.all()
 
 class RegistrationAPIView(APIView):
     permission_classes = (AllowAny,)
@@ -148,7 +87,7 @@ class LoginAPIView(APIView):
 class UserRetrieveUpdateAPIView(RetrieveUpdateAPIView):
     permission_classes = (IsAuthenticated,)
     renderer_classes = (UserJSONRenderer,)
-    serializer_class = UserSerializer
+    serializer_class = RegisterUserSerializer
 
     def retrieve(self, request, *args, **kwargs):
         serializer = self.serializer_class(request.user)
@@ -171,13 +110,11 @@ class CreateSubredditView(CreateAPIView):
     def create(self, request, *args, **kwargs):
         user = request.user
         subreddit_data = request.data.get('subreddit', {})
-        serializer = self.serializer_class(data={
-            'name': subreddit_data.get('name'),
-            'creator': user.pk
-        })
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        subreddit = Subreddit.objects.create(
+            subreddit_data['name'],
+            user
+        )
+        return Response(SubredditSerializer(subreddit).data, status=status.HTTP_201_CREATED)
 
 class CreatePostView(CreateAPIView):
     permission_classes = (IsAuthenticated,)
@@ -188,16 +125,14 @@ class CreatePostView(CreateAPIView):
         author = request.user
         data = request.data.get('post', {})
         subreddit = Subreddit.objects.get(name=subreddit_name)
-        serializer = self.serializer_class(data={
-            'title': data['title'],
-            'subreddit': subreddit.pk,
-            'is_link': data.get('is_link', False),
-            'text': data.get('text', ''),
-            'link': data.get('link', ''),
-            'author': author.pk
-        })
-        serializer.is_valid(raise_exception=True)
-        post = serializer.save()
+        post = Post.objects.create(
+            title=data['title'],
+            subreddit=subreddit,
+            is_link=data.get('is_link', False),
+            text=data.get('text',''),
+            link=data.get('link', ''),
+            author=author
+        )
         return Response({
             'slug': post.slug,
             'subreddit': subreddit_name,
@@ -215,21 +150,13 @@ class CreateCommentView(CreateAPIView):
         post_id = data['post_id']
         parent_comment_id = data.get('parent_comment_id')
         text = data.get('text')
-        serializer = self.serializer_class(data={
-            'post': post_id,
-            'author': author.pk,
-            'parent_comment': parent_comment_id,
-            'text': text
-        })
-        serializer.is_valid(raise_exception=True)
-        comment = serializer.save()
-        d = serializer.data
-        d['child_comments'] = []
-        d['author'] = request.user.username
-        d['score'] = comment.votes
-        d['last_modified'] = comment.last_modified
-        d['id'] = comment.pk
-        d['upvoted'] = True
+        comment = Comment.objects.create(
+            post=Post.objects.get(pk=post_id),
+            author=author,
+            parent_comment=parent_comment_id and Comment.objects.get(pk=parent_comment_id),
+            text=text
+        )
+        d = CommentSerializer(comment, context={'request': request}).data
         return Response(d, status=status.HTTP_201_CREATED)
 
 class EditCommentView(UpdateAPIView):
@@ -262,5 +189,5 @@ class VoteOnComment(APIView):
             elif data['value'] == 0:
                 vote.delete()
         return Response({
-            'comment': serialize_comments(request, [Comment.objects.get(pk=data['comment_id'])])[0]
+            'comment': CommentSerializer(Comment.objects.get(pk=data['comment_id']), context={'request': request}).data
         }, status=status.HTTP_201_CREATED)
