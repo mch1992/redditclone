@@ -103,6 +103,11 @@ class SubredditSerializer(DynamicFieldsModelSerializer):
             'creator': creator
         }
 
+class TextSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Text
+        fields = ('text',)
+
 def voted(user, comment, value):
     return user.is_authenticated and bool(user.vote_set.filter(comment=comment, value=value))
 
@@ -120,13 +125,13 @@ class CommentSerializer(DynamicFieldsModelSerializer):
     upvoted = serializers.BooleanField(default=False)
     downvoted = serializers.BooleanField(default=False)
     child_comments = RecursiveField(many=True)
+    text = TextSerializer()
     class Meta:
         model = Comment
         fields = (
             'id',
             'author',
             'text',
-            'last_modified',
             'created',
             'edited',
             'created_time_ago',
@@ -147,27 +152,35 @@ class CommentSerializer(DynamicFieldsModelSerializer):
         })
         return data
 
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            new_text = validated_data.get('text', {}).get('text')
+            if instance.text.text != new_text:
+                instance.text.text = new_text
+                instance.text.save()
+            validated_data.pop('text', '')
+            super(CommentSerializer, self).update(instance, validated_data)
+        return instance
+
 class PostSerializer(DynamicFieldsModelSerializer):
     subreddit = SubredditSerializer()
     author = UserSerializer(source='get_author')
-    text = serializers.CharField(source='get_text')
     upvoted = serializers.BooleanField(default=False)
     downvoted = serializers.BooleanField(default=False)
     comments = CommentSerializer(many=True)
+    text = TextSerializer()
     class Meta:
         model = Post
         fields = (
             'id',
             'title',
             'subreddit',
-            'is_link',
             'text',
             'author',
             'link',
             'is_deleted',
             'numComments',
             'created',
-            'last_modified',
             'slug',
             'upvoted',
             'downvoted',

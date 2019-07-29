@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views import View
@@ -30,7 +31,6 @@ def posts(request):
             'title': p.title,
             'slug': p.slug,
             'subreddit': p.subreddit.name,
-            'is_link': p.is_link,
             'link': p.link,
             'numComments': len(p.comment_set.all()),
             'score': p.votes
@@ -44,7 +44,6 @@ def subreddit(request, subreddit_name):
         post_data.append({
             'id': p.id,
             'title': p.title,
-            'is_link': p.is_link,
             'link': p.link,
             'slug': p.slug,
             'subreddit': sub.name,
@@ -125,14 +124,14 @@ class CreatePostView(CreateAPIView):
         author = request.user
         data = request.data.get('post', {})
         subreddit = Subreddit.objects.get(name=subreddit_name)
-        post = Post.objects.create(
-            title=data['title'],
-            subreddit=subreddit,
-            is_link=data.get('is_link', False),
-            text=data.get('text',''),
-            link=data.get('link', ''),
-            author=author
-        )
+        with transaction.atomic():
+            post = Post.objects.create(
+                title=data['title'],
+                subreddit=subreddit,
+                text=Text.objects.create(text=Text.objects.create(text=data.get('text', ''))),
+                link=data.get('link', ''),
+                author=author
+            )
         return Response({
             'slug': post.slug,
             'subreddit': subreddit_name,
@@ -150,12 +149,13 @@ class CreateCommentView(CreateAPIView):
         post_id = data['post_id']
         parent_comment_id = data.get('parent_comment_id')
         text = data.get('text')
-        comment = Comment.objects.create(
-            post=Post.objects.get(pk=post_id),
-            author=author,
-            parent_comment=parent_comment_id and Comment.objects.get(pk=parent_comment_id),
-            text=text
-        )
+        with transaction.atomic():
+            comment = Comment.objects.create(
+                post=Post.objects.get(pk=post_id),
+                author=author,
+                parent_comment=parent_comment_id and Comment.objects.get(pk=parent_comment_id),
+                text=Text.objects.create(text=text)
+            )
         d = CommentSerializer(comment, context={'request': request}).data
         return Response(d, status=status.HTTP_201_CREATED)
 

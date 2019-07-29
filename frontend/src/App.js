@@ -253,7 +253,7 @@ class Comment extends Component {
       method: 'PATCH',
       headers: getRequestHeaders(),
       body: JSON.stringify({
-        text: this.state.text
+        text: {text: this.state.text}
       })
     })
       .then(response => response.json())
@@ -262,7 +262,9 @@ class Comment extends Component {
           comment: {
             ...state.comment,
             text: data.text,
-            last_modified: data.last_modified
+            last_modified: data.last_modified,
+            edited: data.edited,
+            edited_time_ago: data.edited_time_ago
           }
         }));
         this.hideEditForm();
@@ -332,7 +334,7 @@ class Comment extends Component {
               <div className={this.state.editFormClass}>
                 <CommentForm
                   postId={post.id}
-                  initialValue={this.state.text}
+                  initialValue={this.state.text.text}
                   hideForm={this.hideEditForm}
                   handleSubmit={this.submitEdit}
                   handleChange={this.getEditText}
@@ -352,7 +354,7 @@ class Comment extends Component {
                     </span>
                   </small>
                 </p>
-                <p>{text}</p>
+                <p>{text.text}</p>
                 <div className={this.state.toolBarClass}>
                   <ButtonToolbar>
                     <Button variant="link" size="sm">permalink</Button>
@@ -405,7 +407,7 @@ class Comment extends Component {
 
 function getHeader(post) {
   let header, postText;
-  if (post.is_link) {
+  if (post.link) {
     header = (
       <h1>
         <a href={post.link} target="_blank" rel="noopener noreferrer">
@@ -422,7 +424,7 @@ function getHeader(post) {
         </Link>
       </h1>
     );
-    postText = <p>{post.text}</p>;
+    postText = <p>{post.text && post.text.text}</p>;
   }
   return [header, postText];
 }
@@ -445,9 +447,7 @@ class CommentsPage extends Component {
         'Authorization': `Token ${localStorage.getItem('jwtToken')}`
       };
     }
-    // const url = `/r/${name}/${id}/${slug}/comments/`;
-    const url = `/post/${id}/`;
-    fetch(url, { headers })
+    fetch(`/post/${id}/`, { headers })
       .then(response => {
         if (response.status !== 200) {
           console.warn('uh oh');
@@ -545,7 +545,7 @@ class Subreddit extends Component {
     } else if (this.state.posts.length === 0) {
       posts = <p>No posts to show</p>;
     } else {
-      posts = this.state.posts.map((post, idx) => {
+     posts = this.state.posts.map((post, idx) => {
         return (
           <Post
             post={post}

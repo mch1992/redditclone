@@ -10,6 +10,10 @@ from django.core.exceptions import FieldError
 from django.contrib.auth.models import Permission
 from guardian.shortcuts import assign_perm
 
+class R:
+    def __init__(self, user):
+        self.user = user
+
 def get_perm(codename):
     return Permission.objects.get(content_type__app_label='redditapp', codename=codename)
 
@@ -41,7 +45,11 @@ def time_ago(dt):
     return pluralize(t.days//365, 'year')
 
 def edited(model):
-    return (model.last_modified - model.created).seconds > 60 * 5
+    # The text object is created first so if the comment/post is unedited
+    # the last_modified will be before the created
+    # Maybe created should be an attribute of the text model
+    td = (model.text.last_modified - model.created)
+    return td.days > -1 and td.seconds > 60 * 5
 
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None, email=None):
@@ -67,7 +75,7 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(db_index=True, max_length=20, unique=True)
-    email = models.EmailField(db_index=True, unique=True, null=True, blank=True)
+    email = models.EmailField(unique=True, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -106,6 +114,11 @@ class User(AbstractBaseUser, PermissionsMixin):
 
         return token.decode('utf-8')
 
+    def save(self, *args, **kwargs):
+        if self.email == '':
+            self.email = None
+        super(User, self).save(*args, **kwargs)
+
 class SubredditManager(models.Manager):
     def create(self, name, creator):
         subreddit = self.model(name=name, creator=creator)
@@ -132,14 +145,20 @@ class DeletedUser(object):
     def get_username(self):
         return self.username
 
+class Text(models.Model):
+    text = models.TextField(blank=True)
+    last_modified = models.DateTimeField(auto_now=True)
+
 class Post(models.Model):
     title = models.CharField(max_length=300)
     subreddit = models.ForeignKey(Subreddit, on_delete=models.CASCADE)
     created = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
-    is_link = models.BooleanField()
     link = models.URLField(blank=True, max_length=2000)
-    text = models.TextField(blank=True)
+    text = models.OneToOneField(
+        Text,
+        on_delete=models.CASCADE,
+        null=True
+    )
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='post_author')
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('post', 'voter'), related_name='post_voters')
@@ -151,10 +170,9 @@ class Post(models.Model):
             return DeletedUser()
         return self.author
 
-    def get_text(self):
-        if self.is_deleted:
-            return '[deleted]'
-        return self.text
+    @property
+    def edited(self):
+        return edited(self)
 
     @property
     def comments(self):
@@ -174,7 +192,7 @@ class Post(models.Model):
 
     @property
     def edited(self):
-        return edited(self)
+        return edited(self.text)
 
     def save(self, *args, **kwargs):
         self.slug = slugify(self.title)
@@ -194,16 +212,10 @@ class Comment(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comment_author')
     parent_comment = models.ForeignKey('self', null=True, on_delete=models.CASCADE, blank=True)
     created = models.DateTimeField(auto_now_add=True)
-    last_modified = models.DateTimeField(auto_now=True)
-    text = models.TextField()
+    text = models.OneToOneField(Text, on_delete=models.CASCADE)
     is_deleted = models.BooleanField(default=False)
     voters = models.ManyToManyField(User, through='Vote', through_fields=('comment', 'voter'), related_name='comment_voters')
     votes = models.IntegerField(default=0)
-
-    def get_text(self):
-        if self.is_deleted:
-            return '[deleted]'
-        return self.text
 
     def get_author(self):
         if self.is_deleted:
@@ -220,7 +232,7 @@ class Comment(models.Model):
 
     @property
     def edited_time_ago(self):
-        return time_ago(self.last_modified)
+        return time_ago(self.text.last_modified)
 
     @property
     def edited(self):
@@ -236,9 +248,9 @@ class Comment(models.Model):
                 assign_perm('redditapp.delete_comment', self.author, self)
 
     def __str__(self):
-        if len(self.text) < 20:
-            return self.text
-        return self.text[:20] + '...'
+        if len(self.text.text) < 20:
+            return self.text.text
+        return self.text.text[:20] + '...'
 
 class VoteManager(models.Manager):
     def create(self, voter, value, post=None, comment=None):
